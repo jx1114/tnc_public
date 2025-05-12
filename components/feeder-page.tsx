@@ -465,7 +465,7 @@ export default function FeederPage({
           onClick={handlePrint}
           className="bg-black text-white px-6 py-2 rounded-md"
         >
-          Save
+          Send
         </button>
       </div>
     </div>

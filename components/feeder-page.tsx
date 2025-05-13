@@ -56,6 +56,9 @@ export default function FeederPage({
   const [errorMessage, setErrorMessage] = useState("")
   const [showModelViewer, setShowModelViewer] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [showContactForm, setShowContactForm] = useState(false)
+  const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', message: '' })
+
   const printRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const pathname = usePathname()
@@ -121,16 +124,35 @@ export default function FeederPage({
   }
 
   const handlePrint = () => {
-    if (!machineInfoComplete()) {
-      showTempError("Not Complete!")
-      return
-    }
-    if (!allDimensionsFilled()) {
-      showTempError("Not Complete!")
-      return
-    }
+    if (!machineInfoComplete() || !allDimensionsFilled()) return showTempError("Not Complete!")
     setShowError(false)
-    window.print()
+    setShowContactForm(true)
+  }
+
+  const handleSendEmail = async () => {
+    try {
+      const html = printRef.current?.outerHTML || ""
+      const response = await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: contactForm.name,
+          email: contactForm.email,
+          phone: contactForm.phone,
+          message: contactForm.message,
+          html,
+        }),
+      })
+
+      if (response.ok) {
+        setShowContactForm(false)
+        alert("Email sent successfully!")
+      } else {
+        alert("Failed to send email.")
+      }
+    } catch (error) {
+      alert("Error sending email")
+    }
   }
 
   const handleNext = () => {
@@ -301,7 +323,8 @@ export default function FeederPage({
 
           {/* Feeder Design */}
           <div className="border bg-[#fffafa] rounded-md p-4 flex-grow mb-3 relative">
-            <h2 className="text-lg font-medium mb-2">Feeder Design</h2>
+            <h2 className="text-lg font-medium mb-2">Feeder Info</h2>
+            <p className="text-sm italic text-red-500 mb-2">(*Set value as 0 if there is no dimension)</p>
             <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
               <Image
                 src={imageSrc || "/placeholder.svg"}
@@ -514,6 +537,23 @@ export default function FeederPage({
     }
   }
 `}</style>
+
+
+{showContactForm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
+          <div className="bg-white rounded-lg p-6 shadow-md w-[400px]">
+            <h2 className="text-xl font-bold mb-4">Contact Info</h2>
+            <input type="text" placeholder="Name" className="border w-full p-2 mb-2" value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })} />
+            <input type="email" placeholder="Email" className="border w-full p-2 mb-2" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} />
+            <input type="tel" placeholder="Phone" className="border w-full p-2 mb-2" value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} />
+            <textarea placeholder="Message" rows={3} className="border w-full p-2 mb-4" value={contactForm.message} onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })} />
+            <div className="flex justify-end gap-2">
+              <button className="bg-gray-300 px-4 py-2 rounded" onClick={() => setShowContactForm(false)}>Cancel</button>
+              <button className="bg-black text-white px-4 py-2 rounded" onClick={handleSendEmail}>Submit</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

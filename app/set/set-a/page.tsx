@@ -37,7 +37,7 @@ export default function setAPage() {
       dimensionDescriptions={setADimensionDescriptions}
       dimensionPositions={setADimensionPositions}
       machineInfoFields={[
-        { id: "machineNo", label: "Machine No.", type: "text" },
+        { id: "Part Name", label: "Part Name", type: "text" },
         {
           id: "rotation",
           label: "Rotation",

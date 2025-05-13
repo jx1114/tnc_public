@@ -41,7 +41,7 @@ export default function BowlFeederPage() {
           options: ["Clockwise", "Anti-clockwise"],
         },
         { id: "uph", label: "UPH", type: "number" },
-        { id: "remark", label: "Remark", type: "text" },
+        
       ]}
     />
   )

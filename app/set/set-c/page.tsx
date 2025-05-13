@@ -57,7 +57,7 @@ export default function setCPage() {
           options: ["Clockwise", "Anti-clockwise"],
         },
         { id: "uph", label: "UPH", type: "number" },
-        { id: "remark", label: "Remark", type: "text" },
+        
       ]}
     />
   )

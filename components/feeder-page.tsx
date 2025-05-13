@@ -43,7 +43,6 @@ export default function FeederPage({
       options: ["Clockwise", "Anti-clockwise"],
     },
     { id: "uph", label: "UPH", type: "number" },
-    { id: "remark", label: "Remark", type: "text" },
     { id: "remark", label: "Remark", type: "text" }, // Optional field
   ],
 }: FeederPageProps) {

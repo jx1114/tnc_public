@@ -32,10 +32,13 @@ Phone: ${phone}
 
 ${message ? `Message:\n${message}\n\n` : ""}
 
+          COPY FROM HERE
+↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
 FEEDER CONFIGURATION DETAILS
 ===========================
 ${formData}
-      `,
+`,
     }
 
     await transporter.sendMail(mailOptions)

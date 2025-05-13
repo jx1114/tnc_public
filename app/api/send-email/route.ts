@@ -1,94 +1,60 @@
 import { type NextRequest, NextResponse } from "next/server"
 import nodemailer from "nodemailer"
-import puppeteer from "puppeteer"
 
-// Email transporter configuration
+// Configure email transporter
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER,         // Your Gmail address
-    pass: process.env.EMAIL_PASS,     // App password, not regular password
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 })
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, phone, message, html } = await req.json()
+    // Handle multipart form data
+    const formData = await req.formData()
 
-    if (!name || !email || !phone || !html) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    const name = formData.get("name") as string
+    const email = formData.get("email") as string
+    const phone = formData.get("phone") as string
+    const message = formData.get("message") as string
+    const file = formData.get("file") as File
+
+    if (!name || !email || !phone || !file) {
+      return NextResponse.json({ error: "Name, email, phone, and file are required" }, { status: 400 })
     }
 
-    // Generate PDF from submitted HTML
-    const pdfBuffer = await generatePDF(html)
+    // Convert file to buffer
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
 
-    // Prepare and send email
-    await transporter.sendMail({
+    // Send email with PDF attachment
+    const mailOptions = {
       from: process.env.EMAIL_USER,
-      to: process.env.RECIPIENT_EMAIL, // Same recipient every time
-      subject: `Feeder Configuration - ${name}`,
+      to: process.env.RECIPIENT_EMAIL,
+      subject: `Feeder Configuration from ${name}`,
       text: `
         Name: ${name}
         Email: ${email}
         Phone: ${phone}
-
+        
         Message:
         ${message || "No message provided"}
       `,
       attachments: [
         {
-          filename: "feeder-configuration.pdf",
-          content: pdfBuffer,
+          filename: file.name || "feeder-configuration.pdf",
+          content: fileBuffer,
+          contentType: "application/pdf",
         },
       ],
-    })
+    }
+
+    await transporter.sendMail(mailOptions)
 
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Error sending email:", error)
     return NextResponse.json({ error: "Failed to send email" }, { status: 500 })
-  }
-}
-
-// Generate PDF from HTML using Puppeteer
-async function generatePDF(html: string): Promise<Buffer> {
-  try {
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    })
-
-    const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: "networkidle0" })
-
-    // Add print styles (optional)
-    await page.addStyleTag({
-      content: `
-        @page {
-          size: A4;
-          margin: 10mm;
-        }
-        body {
-          font-family: Arial, sans-serif;
-        }
-      `,
-    })
-
-    const pdfUint8Array = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: {
-        top: "10mm",
-        right: "10mm",
-        bottom: "10mm",
-        left: "10mm",
-      },
-    })
-
-    await browser.close()
-    return Buffer.from(pdfUint8Array)
-  } catch (error) {
-    console.error("PDF generation failed:", error)
-    return Buffer.from("PDF generation failed.")
   }
 }

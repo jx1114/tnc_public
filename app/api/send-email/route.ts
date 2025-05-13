@@ -12,42 +12,30 @@ const transporter = nodemailer.createTransport({
 
 export async function POST(req: NextRequest) {
   try {
-    // Handle multipart form data
-    const formData = await req.formData()
+    const { name, email, phone, message, feederType, title, formData } = await req.json()
 
-    const name = formData.get("name") as string
-    const email = formData.get("email") as string
-    const phone = formData.get("phone") as string
-    const message = formData.get("message") as string
-    const file = formData.get("file") as File
-
-    if (!name || !email || !phone || !file) {
-      return NextResponse.json({ error: "Name, email, phone, and file are required" }, { status: 400 })
+    if (!name || !email || !phone) {
+      return NextResponse.json({ error: "Name, email, and phone are required" }, { status: 400 })
     }
 
-    // Convert file to buffer
-    const fileBuffer = Buffer.from(await file.arrayBuffer())
-
-    // Send email with PDF attachment
+    // Send email with text data
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: process.env.RECIPIENT_EMAIL,
       subject: `Feeder Configuration from ${name}`,
       text: `
-        Name: ${name}
-        Email: ${email}
-        Phone: ${phone}
-        
-        Message:
-        ${message || "No message provided"}
+Contact Information:
+-------------------
+Name: ${name}
+Email: ${email}
+Phone: ${phone}
+
+${message ? `Message:\n${message}\n\n` : ""}
+
+FEEDER CONFIGURATION DETAILS
+===========================
+${formData}
       `,
-      attachments: [
-        {
-          filename: file.name || "feeder-configuration.pdf",
-          content: fileBuffer,
-          contentType: "application/pdf",
-        },
-      ],
     }
 
     await transporter.sendMail(mailOptions)

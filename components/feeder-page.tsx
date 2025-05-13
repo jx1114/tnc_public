@@ -1,14 +1,12 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useRef, useEffect } from "react"
 import Image from "next/image"
 import { useRouter, usePathname } from "next/navigation"
 import { useFormContext } from "@/context/FormContext"
 import NavigationMenu from "./navigation-menu"
 import ModelViewer from "./model-viewer"
-import { RefreshCw, Upload } from "lucide-react"
+import { RefreshCw, Printer, Send, Clipboard } from "lucide-react"
 
 export type FeederPageProps = {
   title: string
@@ -60,12 +58,11 @@ export default function FeederPage({
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [showContactForm, setShowContactForm] = useState(false)
   const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "", message: "" })
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [showSaveInstructions, setShowSaveInstructions] = useState(false)
+  const [showPasteModal, setShowPasteModal] = useState(false)
+  const [pasteText, setPasteText] = useState("")
 
   const printRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -128,39 +125,14 @@ export default function FeederPage({
     setDimensionValue(feederData.dimensions[dimension] || "")
   }
 
-  const handleSave = () => {
+  const handleSend = () => {
     if (!machineInfoComplete() || !allDimensionsFilled()) return showTempError("Not Complete!")
     setShowError(false)
-
-    // Show save instructions modal
-    setShowSaveInstructions(true)
-
-    // Prepare for printing
-    setTimeout(() => {
-      window.print()
-      // After printing, show instructions to upload the saved PDF
-      setTimeout(() => {
-        setShowSaveInstructions(false)
-        setShowContactForm(true)
-      }, 1000)
-    }, 500)
+    setShowContactForm(true)
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0]
-      // Check if file is a PDF
-      if (file.type !== "application/pdf") {
-        showTempError("Please upload a PDF file")
-        return
-      }
-      // Check file size (max 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        showTempError("File size should be less than 10MB")
-        return
-      }
-      setSelectedFile(file)
-    }
+  const handleSaveAsPDF = () => {
+    window.print()
   }
 
   const handleSendEmail = async () => {
@@ -170,25 +142,24 @@ export default function FeederPage({
       return
     }
 
-    if (!selectedFile) {
-      showTempError("Please upload the saved PDF file")
-      return
-    }
-
     try {
       setIsSubmitting(true)
 
-      // Create form data to send file
-      const formData = new FormData()
-      formData.append("name", contactForm.name)
-      formData.append("email", contactForm.email)
-      formData.append("phone", contactForm.phone)
-      formData.append("message", contactForm.message)
-      formData.append("file", selectedFile)
+      // Prepare data to send
+      const formattedData = formatDataForEmail(feederData, dimensionDescriptions, machineInfoFields)
 
       const response = await fetch("/api/send-email", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: contactForm.name,
+          email: contactForm.email,
+          phone: contactForm.phone,
+          message: contactForm.message,
+          feederType,
+          title,
+          formData: formattedData,
+        }),
       })
 
       if (response.ok) {
@@ -202,6 +173,33 @@ export default function FeederPage({
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const formatDataForEmail = (
+    data: { machineInfo: Record<string, string>; dimensions: Record<string, string> },
+    dimensionDescriptions: Record<string, string>,
+    machineInfoFields: Array<{ id: string; label: string; type: string; options?: string[] }>,
+  ) => {
+    let result = `${title}\n`
+    result += `Generated on: ${getCurrentDate()}\n\n`
+
+    // Machine Information
+    result += "MACHINE INFORMATION\n"
+    result += "-------------------\n"
+    machineInfoFields.forEach((field) => {
+      const value = data.machineInfo[field.id] || "Not specified"
+      result += `${field.label}: ${value}\n`
+    })
+
+    // Dimensions
+    result += "\nDIMENSIONS\n"
+    result += "----------\n"
+    Object.entries(dimensionDescriptions).forEach(([key, description]) => {
+      const value = data.dimensions[key] || "Not specified"
+      result += `${key} ${value} mm\n`
+    })
+
+    return result
   }
 
   const handleNext = () => {
@@ -281,6 +279,72 @@ export default function FeederPage({
         [dimension]: value,
       },
     })
+  }
+
+  const handlePasteData = () => {
+    setShowPasteModal(true)
+  }
+
+  const processPastedData = () => {
+    try {
+      // Parse the pasted text
+      const lines = pasteText.split("\n").filter((line) => line.trim() !== "")
+
+      // Create a new object to store the parsed data
+      const newMachineInfo: Record<string, string> = {}
+      const newDimensions: Record<string, string> = {}
+
+      // Process each line
+      lines.forEach((line) => {
+        // Try to match machine info fields
+        machineInfoFields.forEach((field) => {
+          const regex = new RegExp(`${field.label}\\s*:\\s*(.+)`, "i")
+          const match = line.match(regex)
+          if (match && match[1]) {
+            newMachineInfo[field.id] = match[1].trim()
+          }
+        })
+
+        // Try to match dimensions
+        Object.entries(dimensionDescriptions).forEach(([key, description]) => {
+          // Match either "A: 100" or "A (Bowl Diameter): 100" or just look for the dimension code
+          const simpleRegex = new RegExp(`^\\s*${key}\\s*:\\s*(\\d+)`, "i")
+          const detailedRegex = new RegExp(`^\\s*${key}\\s*\$$.*\$$\\s*:\\s*(\\d+)`, "i")
+          const valueOnlyRegex = new RegExp(`\\b${key}\\b[^:]*?\\b(\\d+)\\s*mm\\b`, "i")
+
+          const simpleMatch = line.match(simpleRegex)
+          const detailedMatch = line.match(detailedRegex)
+          const valueOnlyMatch = line.match(valueOnlyRegex)
+
+          if (simpleMatch && simpleMatch[1]) {
+            newDimensions[key] = simpleMatch[1].trim()
+          } else if (detailedMatch && detailedMatch[1]) {
+            newDimensions[key] = detailedMatch[1].trim()
+          } else if (valueOnlyMatch && valueOnlyMatch[1]) {
+            newDimensions[key] = valueOnlyMatch[1].trim()
+          }
+        })
+      })
+
+      // Update the form data with the parsed values
+      const updatedData = {
+        machineInfo: { ...feederData.machineInfo, ...newMachineInfo },
+        dimensions: { ...feederData.dimensions, ...newDimensions },
+      }
+
+      // Force a complete update of the form data
+      updateFeederData(feederType, updatedData)
+
+      // Log the updated data to verify
+      console.log("Updated data:", updatedData)
+
+      setShowPasteModal(false)
+      setPasteText("")
+      showTempError("Data imported successfully!", true)
+    } catch (error) {
+      console.error("Error parsing data:", error)
+      showTempError("Failed to parse the pasted data. Please check the format.")
+    }
   }
 
   return (
@@ -399,7 +463,7 @@ export default function FeederPage({
               ))}
             </div>
 
-            <div className="absolute bottom-6 left-6 flex print:hidden">
+            <div className="absolute bottom-6 left-6 flex print:hidden gap-2">
               <button
                 onClick={handleClearData}
                 className="bg-white border border-black text-black px-4 py-2 rounded-md flex items-center"
@@ -407,6 +471,8 @@ export default function FeederPage({
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Clear Data
               </button>
+
+              
             </div>
 
             <div className="absolute bottom-6 right-6 flex print:hidden">
@@ -512,7 +578,7 @@ export default function FeederPage({
                 />
               </div>
 
-              {/* Buttons: Save and View 3D */}
+              {/* Buttons: View 3D and Send */}
               <div className="flex justify-center gap-4 mt-2">
                 <button
                   onClick={() => {
@@ -527,29 +593,14 @@ export default function FeederPage({
                 <button
                   onClick={() => {
                     setShowSuccessModal(false)
-                    handleSave()
+                    handleSend()
                   }}
-                  className="bg-black text-white px-6 py-2 rounded-md"
+                  className="bg-black text-white px-6 py-2 rounded-md flex items-center"
                 >
-                  Save
+                  <Send className="mr-2 h-4 w-4" />
+                  Send
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Save Instructions Modal */}
-        {showSaveInstructions && (
-          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
-            <div className="bg-white p-6 rounded-lg w-[500px] shadow-lg text-center">
-              <h2 className="text-xl font-bold mb-4">Save Your Configuration</h2>
-              <p className="mb-4">Your browser's print dialog will open. Please:</p>
-              <ol className="text-left list-decimal pl-6 mb-4">
-                <li>Select "Save as PDF" as the destination</li>
-                <li>Choose a location to save the file</li>
-                <li>Click "Save"</li>
-              </ol>
-              <p className="mb-4 font-medium">After saving, you'll be asked to upload the PDF to send it.</p>
             </div>
           </div>
         )}
@@ -567,13 +618,22 @@ export default function FeederPage({
           </div>
         )}
 
-        {/* Contact Form with File Upload */}
+        {/* Contact Form */}
         {showContactForm && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
-            <div className="bg-white rounded-lg p-6 shadow-md w-[500px]">
+            <div className="bg-white rounded-lg p-6 shadow-md w-[500px] relative">
+              {/* Add close button */}
+              <button
+                onClick={() => setShowContactForm(false)}
+                className="absolute top-2 right-2 text-gray-500 hover:text-black text-xl"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+
               <h2 className="text-xl font-bold mb-4">Send Your Configuration</h2>
               <p className="text-sm text-gray-600 mb-4">
-                Please provide your contact information and upload the PDF you just saved.
+                Please provide your contact information to send the feeder configuration.
               </p>
 
               <div className="mb-4">
@@ -621,7 +681,7 @@ export default function FeederPage({
                 />
               </div>
 
-              <div className="mb-4">
+              <div className="mb-6">
                 <label htmlFor="message" className="block text-sm font-medium mb-1">
                   Message
                 </label>
@@ -635,45 +695,13 @@ export default function FeederPage({
                 />
               </div>
 
-              <div className="mb-6">
-                <label htmlFor="file" className="block text-sm font-medium mb-1">
-                  Attachment (PDF) <span className="text-red-500">*</span>
-                </label>
-                <div className="border border-dashed border-gray-300 rounded p-4 text-center">
-                  <input
-                    type="file"
-                    id="file"
-                    ref={fileInputRef}
-                    accept=".pdf"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  {selectedFile ? (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm truncate max-w-[300px]">{selectedFile.name}</span>
-                      <button onClick={() => setSelectedFile(null)} className="text-red-500 text-sm">
-                        Remove
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center justify-center w-full py-2 text-gray-600 hover:text-black"
-                    >
-                      <Upload className="mr-2 h-4 w-4" />
-                      <span>Upload the saved PDF file</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
               <div className="flex justify-end gap-2">
                 <button
-                  className="bg-gray-300 px-4 py-2 rounded"
-                  onClick={() => setShowContactForm(false)}
-                  disabled={isSubmitting}
+                  className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded flex items-center"
+                  onClick={handleSaveAsPDF}
                 >
-                  Cancel
+                  <Printer className="mr-2 h-4 w-4" />
+                  Save PDF
                 </button>
                 <button
                   className="bg-black text-white px-4 py-2 rounded flex items-center"
@@ -707,6 +735,42 @@ export default function FeederPage({
                   ) : (
                     "Submit"
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Paste Data Modal */}
+        {showPasteModal && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
+            <div className="bg-white rounded-lg p-6 shadow-md w-[600px]">
+              <h2 className="text-xl font-bold mb-4">Paste Configuration Data</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Paste your configuration data below. The system will try to extract machine information and dimensions.
+              </p>
+
+              <textarea
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                placeholder="Paste your configuration data here..."
+                rows={10}
+                className="border w-full p-2 rounded mb-4"
+              />
+
+              <div className="flex justify-end gap-2">
+                <button
+                  className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded"
+                  onClick={() => setShowPasteModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="bg-black text-white px-4 py-2 rounded"
+                  onClick={processPastedData}
+                  disabled={!pasteText.trim()}
+                >
+                  Import Data
                 </button>
               </div>
             </div>

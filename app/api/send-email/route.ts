@@ -5,8 +5,8 @@ import nodemailer from "nodemailer"
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: process.env.EMAIL_USERNAME,
+    pass: process.env.EMAIL_PASSWORD,
   },
 })
 
@@ -20,15 +20,15 @@ export async function POST(req: NextRequest) {
 
     // Send email with text data
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: process.env.EMAIL_USERNAME,
       to: process.env.RECIPIENT_EMAIL,
       subject: `Feeder Configuration from ${name}`,
       text: `
 Contact Information:
 -------------------
-Name: ${name}
+Company Name: ${name}
 Email: ${email}
-Phone: ${phone}
+Contact No.: ${phone}
 
 ${message ? `Message:\n${message}\n\n` : ""}
 

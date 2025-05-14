@@ -158,7 +158,7 @@ export default function FeederPage({
         body: JSON.stringify({
           name: contactForm.name,
           email: contactForm.email,
-          phone: contactForm.contactNo,
+          phone: contactForm.contactNo || "Not provided",
           message: contactForm.message,
           feederType,
           title,
@@ -189,7 +189,7 @@ export default function FeederPage({
 
     // Machine Information
     result += "MACHINE INFORMATION\n"
-    result += "-------------------\n"
+    result += "--------------------------------------------\n"
     machineInfoFields.forEach((field) => {
       const value = data.machineInfo[field.id] || "Not specified"
       result += `${field.label}: ${value}\n`
@@ -197,7 +197,7 @@ export default function FeederPage({
 
     // Dimensions
     result += "\nDIMENSIONS\n"
-    result += "----------\n"
+    result += "--------------------------------------------\n"
     Object.entries(dimensionDescriptions).forEach(([key, description]) => {
       const value = data.dimensions[key] || "Not specified"
       result += `${key} ${value} mm\n`

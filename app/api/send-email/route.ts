@@ -14,8 +14,8 @@ export async function POST(req: NextRequest) {
   try {
     const { name, email, phone, message, feederType, title, formData } = await req.json()
 
-    if (!name || !email || !phone) {
-      return NextResponse.json({ error: "Name, email, and phone are required" }, { status: 400 })
+    if (!name || !email) {
+      return NextResponse.json({ error: "Name and email are required" }, { status: 400 })
     }
 
     // Send email with text data

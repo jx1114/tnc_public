@@ -56,7 +56,7 @@ export default function FeederPage({
   const [showModelViewer, setShowModelViewer] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [showContactForm, setShowContactForm] = useState(false)
-  const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "", message: "" })
+  const [contactForm, setContactForm] = useState({ name: "", email: "", contactNo: "", message: "" })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPasteModal, setShowPasteModal] = useState(false)
   const [pasteText, setPasteText] = useState("")
@@ -125,7 +125,7 @@ export default function FeederPage({
   }
 
   const handleSend = () => {
-    if (!machineInfoComplete() || !allDimensionsFilled()) return showTempError("Not Complete!")
+    if (!allDimensionsFilled()) return showTempError("Not Complete!")
     setShowError(false)
     setShowContactForm(true)
   }
@@ -136,8 +136,13 @@ export default function FeederPage({
 
   const handleSendEmail = async () => {
     // Validate form
-    if (!contactForm.name || !contactForm.email || !contactForm.phone) {
-      showTempError("Please fill in all required fields")
+    if (!contactForm.name) {
+      showTempError("Company name is missing.")
+      return
+    }
+
+    if (!contactForm.email) {
+      showTempError("Email is missing.")
       return
     }
 
@@ -153,7 +158,7 @@ export default function FeederPage({
         body: JSON.stringify({
           name: contactForm.name,
           email: contactForm.email,
-          phone: contactForm.phone,
+          phone: contactForm.contactNo,
           message: contactForm.message,
           feederType,
           title,
@@ -162,7 +167,7 @@ export default function FeederPage({
       })
 
       if (response.ok) {
-        setShowContactForm(false)
+        
         showTempError("Email sent successfully!", true)
       } else {
         showTempError("Failed to send email. Please try again.")
@@ -202,10 +207,7 @@ export default function FeederPage({
   }
 
   const handleNext = () => {
-    if (!machineInfoComplete()) {
-      showTempError("Not Complete!")
-      return
-    }
+   
     if (!allDimensionsFilled()) {
       showTempError("Not Complete!")
       return
@@ -232,10 +234,7 @@ export default function FeederPage({
   }
 
   const handleOkClick = () => {
-    if (!machineInfoComplete()) {
-      showTempError("Not Complete!")
-      return
-    }
+    
     if (!allDimensionsFilled()) {
       showTempError("Not Complete!")
       return
@@ -401,7 +400,7 @@ export default function FeederPage({
                       value={feederData.machineInfo[field.id] || ""}
                       onChange={(e) => updateMachineInfo(field.id, e.target.value)}
                       className={`w-full border rounded-md px-3 py-2 ${
-                        !feederData.machineInfo[field.id] ? "border-red-500" : ""
+                        !feederData.machineInfo[field.id] ? "" : ""
                       }`}
                     >
                       <option value="">Select</option>
@@ -418,7 +417,7 @@ export default function FeederPage({
                       value={feederData.machineInfo[field.id] || ""}
                       onChange={(e) => updateMachineInfo(field.id, e.target.value)}
                       className={`w-full border rounded-md px-3 py-2 ${
-                        field.id !== "remark" && !feederData.machineInfo[field.id] ? "border-red-500" : ""
+                        field.id !== "remark" && !feederData.machineInfo[field.id] ? "" : ""
                       }`}
                     />
                   )}
@@ -430,7 +429,7 @@ export default function FeederPage({
           {/* Feeder Design */}
           <div className="border bg-[#fffafa] rounded-md p-4 flex-grow mb-3 relative">
             <h2 className="text-lg font-medium mb-2">Feeder Info</h2>
-            <p className="text-sm italic text-red-500 mb-2">(*Set value as 0 if there is no dimension)</p>
+            <p className="text-sm italic text-red-500 mb-2">* Set value as 0 if there is no dimension</p>
             <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
               <Image
                 src={imageSrc || "/placeholder.svg"}
@@ -539,15 +538,17 @@ export default function FeederPage({
 
         {/* Error Toast */}
         {showError && (
+          <div className={`fixed inset-0 flex items-center justify-center z-[100] pointer-events-none print:hidden`}>
           <div
-            className={`fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 p-4 ${
+            className={`${
               errorMessage.includes("successfully")
-                ? "bg-green-50 border-green-500 text-green-600"
-                : "bg-red-50 border-red-500 text-red-600"
-            } rounded-md shadow-lg print:hidden max-w-xs`}
+                ? "bg-green-100 border-2 border-green-500 text-green-700"
+                : "bg-red-100 border-2 border-red-500 text-red-700"
+            } rounded-md shadow-lg p-4 max-w-xs text-center font-medium`}
           >
             {errorMessage}
           </div>
+        </div>
         )}
 
         {/* Success Modal */}
@@ -637,12 +638,12 @@ export default function FeederPage({
 
               <div className="mb-4">
                 <label htmlFor="name" className="block text-sm font-medium mb-1">
-                  Name <span className="text-red-500">*</span>
+                  Comapny Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   id="name"
-                  placeholder="Your name"
+                  placeholder="Company Name"
                   className="border w-full p-2 rounded"
                   value={contactForm.name}
                   onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
@@ -657,7 +658,7 @@ export default function FeederPage({
                 <input
                   type="email"
                   id="email"
-                  placeholder="Your email"
+                  placeholder="Email"
                   className="border w-full p-2 rounded"
                   value={contactForm.email}
                   onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
@@ -667,16 +668,16 @@ export default function FeederPage({
 
               <div className="mb-4">
                 <label htmlFor="phone" className="block text-sm font-medium mb-1">
-                  Phone <span className="text-red-500">*</span>
+                  Contact Number 
                 </label>
                 <input
                   type="tel"
                   id="phone"
-                  placeholder="Your phone number"
+                  placeholder="Contact Number (optional)"
                   className="border w-full p-2 rounded"
-                  value={contactForm.phone}
-                  onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
-                  required
+                  value={contactForm.contactNo}
+                  onChange={(e) => setContactForm({ ...contactForm, contactNo: e.target.value })}
+                  
                 />
               </div>
 

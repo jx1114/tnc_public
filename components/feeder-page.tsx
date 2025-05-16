@@ -6,7 +6,8 @@ import { useRouter, usePathname } from "next/navigation"
 import { useFormContext } from "@/context/FormContext"
 import NavigationMenu from "./navigation-menu"
 import ModelViewer from "./model-viewer"
-import { RefreshCw, Printer, Send, Clipboard } from "lucide-react"
+import { RefreshCw, Send, Clipboard, Check } from "lucide-react"
+import VanillaContactForm from "./vanilla-contact-form"
 
 export type FeederPageProps = {
   title: string
@@ -43,6 +44,7 @@ export default function FeederPage({
       options: ["Clockwise", "Anti-clockwise"],
     },
     { id: "uph", label: "UPH", type: "number" },
+    { id: "remark", label: "Remark", type: "text" },
     { id: "remark", label: "Remark", type: "text" }, // Optional field
   ],
 }: FeederPageProps) {
@@ -56,10 +58,14 @@ export default function FeederPage({
   const [showModelViewer, setShowModelViewer] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [showContactForm, setShowContactForm] = useState(false)
-  const [contactForm, setContactForm] = useState({ name: "", email: "", contactNo: "", message: "" })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPasteModal, setShowPasteModal] = useState(false)
   const [pasteText, setPasteText] = useState("")
+  const [parsedData, setParsedData] = useState<{
+    machineInfo: Record<string, string>
+    dimensions: Record<string, string>
+  } | null>(null)
+  const [showParsePreview, setShowParsePreview] = useState(false)
 
   const printRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -125,7 +131,7 @@ export default function FeederPage({
   }
 
   const handleSend = () => {
-    if (!allDimensionsFilled()) return showTempError("Not Complete!")
+    if ( !allDimensionsFilled()) return showTempError("Not Complete!")
     setShowError(false)
     setShowContactForm(true)
   }
@@ -134,45 +140,51 @@ export default function FeederPage({
     window.print()
   }
 
-  const handleSendEmail = async () => {
-    // Validate form
-    if (!contactForm.name) {
-      showTempError("Company name is missing.")
-      return
-    }
-
-    if (!contactForm.email) {
-      showTempError("Email is missing.")
-      return
-    }
-
+  const handleSendEmail = async (formData: { name: string; email: string; phone: string; message: string }) => {
     try {
       setIsSubmitting(true)
 
       // Prepare data to send
       const formattedData = formatDataForEmail(feederData, dimensionDescriptions, machineInfoFields)
 
+      // Create a simple data object with explicit property names that won't be affected by translation
+      const emailData = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone || "Not provided", // Use fallback if phone is empty
+        message: formData.message,
+        feederType,
+        title,
+        formData: formattedData,
+      }
+
+      // Log the data being sent (for debugging)
+      console.log("Sending email data:", emailData)
+
       const response = await fetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: contactForm.name,
-          email: contactForm.email,
-          phone: contactForm.contactNo || "Not provided",
-          message: contactForm.message,
-          feederType,
-          title,
-          formData: formattedData,
-        }),
+        body: JSON.stringify(emailData),
       })
 
       if (response.ok) {
-        
+        // Show success message
         showTempError("Email sent successfully!", true)
       } else {
-        showTempError("Failed to send email. Please try again.")
+        // Try to parse the error response
+        let errorMessage = "Unknown error"
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.error || errorMessage
+        } catch (e) {
+          // If we can't parse the response, use a generic error message
+        }
+
+        console.error("Email sending failed:", errorMessage)
+        showTempError(`Failed to send email: ${errorMessage}. Please try again.`)
       }
     } catch (error) {
+      console.error("Error sending email:", error)
       showTempError("Error sending email. Please try again.")
     } finally {
       setIsSubmitting(false)
@@ -189,7 +201,7 @@ export default function FeederPage({
 
     // Machine Information
     result += "MACHINE INFORMATION\n"
-    result += "--------------------------------------------\n"
+    result += "-----------------------------------\n"
     machineInfoFields.forEach((field) => {
       const value = data.machineInfo[field.id] || "Not specified"
       result += `${field.label}: ${value}\n`
@@ -197,7 +209,7 @@ export default function FeederPage({
 
     // Dimensions
     result += "\nDIMENSIONS\n"
-    result += "--------------------------------------------\n"
+    result += "-----------------------------------\n"
     Object.entries(dimensionDescriptions).forEach(([key, description]) => {
       const value = data.dimensions[key] || "Not specified"
       result += `${key} ${value} mm\n`
@@ -207,7 +219,7 @@ export default function FeederPage({
   }
 
   const handleNext = () => {
-   
+    
     if (!allDimensionsFilled()) {
       showTempError("Not Complete!")
       return
@@ -246,7 +258,7 @@ export default function FeederPage({
   const showTempError = (message: string, isSuccess = false) => {
     setShowError(true)
     setErrorMessage(message)
-    setTimeout(() => setShowError(false), isSuccess ? 3000 : 5000)
+    setTimeout(() => setShowError(false), isSuccess ? 4000 : 5000)
   }
 
   const getCurrentDate = () => {
@@ -281,9 +293,11 @@ export default function FeederPage({
 
   const handlePasteData = () => {
     setShowPasteModal(true)
+    setParsedData(null)
+    setShowParsePreview(false)
   }
 
-  const processPastedData = () => {
+  const parseData = () => {
     try {
       // Parse the pasted text
       const lines = pasteText.split("\n").filter((line) => line.trim() !== "")
@@ -296,33 +310,79 @@ export default function FeederPage({
       lines.forEach((line) => {
         // Try to match machine info fields
         machineInfoFields.forEach((field) => {
-          const regex = new RegExp(`${field.label}\\s*:\\s*(.+)`, "i")
-          const match = line.match(regex)
-          if (match && match[1]) {
-            newMachineInfo[field.id] = match[1].trim()
+          // Match patterns like "Machine no.: ABC123" or "Machine no: ABC123" or just "Machine no ABC123"
+          const regexWithColon = new RegExp(`${field.label}\\s*:\\s*(.+)`, "i")
+          const regexWithoutColon = new RegExp(`${field.label}\\s+([^:]+)`, "i")
+
+          const matchWithColon = line.match(regexWithColon)
+          const matchWithoutColon = line.match(regexWithoutColon)
+
+          if (matchWithColon && matchWithColon[1]) {
+            newMachineInfo[field.id] = matchWithColon[1].trim()
+          } else if (matchWithoutColon && matchWithoutColon[1]) {
+            newMachineInfo[field.id] = matchWithoutColon[1].trim()
           }
         })
 
-        // Try to match dimensions
+        // Try to match dimensions - use multiple patterns to catch different formats
         Object.entries(dimensionDescriptions).forEach(([key, description]) => {
-          // Match either "A: 100" or "A (Bowl Diameter): 100" or just look for the dimension code
-          const simpleRegex = new RegExp(`^\\s*${key}\\s*:\\s*(\\d+)`, "i")
-          const detailedRegex = new RegExp(`^\\s*${key}\\s*\$$.*\$$\\s*:\\s*(\\d+)`, "i")
-          const valueOnlyRegex = new RegExp(`\\b${key}\\b[^:]*?\\b(\\d+)\\s*mm\\b`, "i")
+          // Pattern 1: "A: 100" or "A : 100"
+          const pattern1 = new RegExp(`\\b${key}\\s*:\\s*(\\d+)`, "i")
 
-          const simpleMatch = line.match(simpleRegex)
-          const detailedMatch = line.match(detailedRegex)
-          const valueOnlyMatch = line.match(valueOnlyRegex)
+          // Pattern 2: "A (Bowl Diameter): 100" or similar with description
+          const pattern2 = new RegExp(`\\b${key}\\s*\$$[^)]*\$$\\s*:\\s*(\\d+)`, "i")
 
-          if (simpleMatch && simpleMatch[1]) {
-            newDimensions[key] = simpleMatch[1].trim()
-          } else if (detailedMatch && detailedMatch[1]) {
-            newDimensions[key] = detailedMatch[1].trim()
-          } else if (valueOnlyMatch && valueOnlyMatch[1]) {
-            newDimensions[key] = valueOnlyMatch[1].trim()
+          // Pattern 3: "A 100 mm" or "Dimension A: 100 mm" or similar
+          const pattern3 = new RegExp(`\\b${key}\\b[^:]*?\\b(\\d+)\\s*mm\\b`, "i")
+
+          // Pattern 4: Look for description directly: "Bowl Diameter: 100"
+          const pattern4 = new RegExp(`\\b${description}\\s*:\\s*(\\d+)`, "i")
+
+          // Pattern 5: Just look for the dimension code and a number nearby
+          const pattern5 = new RegExp(`\\b${key}\\b[^:]*?\\b(\\d+)\\b`, "i")
+
+          const match1 = line.match(pattern1)
+          const match2 = line.match(pattern2)
+          const match3 = line.match(pattern3)
+          const match4 = line.match(pattern4)
+          const match5 = line.match(pattern5)
+
+          if (match1 && match1[1]) {
+            newDimensions[key] = match1[1].trim()
+          } else if (match2 && match2[1]) {
+            newDimensions[key] = match2[1].trim()
+          } else if (match3 && match3[1]) {
+            newDimensions[key] = match3[1].trim()
+          } else if (match4 && match4[1]) {
+            newDimensions[key] = match4[1].trim()
+          } else if (match5 && match5[1]) {
+            newDimensions[key] = match5[1].trim()
           }
         })
       })
+
+      // Show preview of parsed data
+      setParsedData({
+        machineInfo: newMachineInfo,
+        dimensions: newDimensions,
+      })
+
+      setShowParsePreview(true)
+
+      return { newMachineInfo, newDimensions }
+    } catch (error) {
+      console.error("Error parsing data:", error)
+      showTempError("Failed to parse the pasted data. Please check the format.")
+      return null
+    }
+  }
+
+  const applyParsedData = () => {
+    if (!parsedData) {
+      const result = parseData()
+      if (!result) return
+
+      const { newMachineInfo, newDimensions } = result
 
       // Update the form data with the parsed values
       const updatedData = {
@@ -333,16 +393,28 @@ export default function FeederPage({
       // Force a complete update of the form data
       updateFeederData(feederType, updatedData)
 
-      // Log the updated data to verify
-      console.log("Updated data:", updatedData)
-
       setShowPasteModal(false)
       setPasteText("")
       showTempError("Data imported successfully!", true)
-    } catch (error) {
-      console.error("Error parsing data:", error)
-      showTempError("Failed to parse the pasted data. Please check the format.")
+    } else {
+      // Update the form data with the already parsed values
+      const updatedData = {
+        machineInfo: { ...feederData.machineInfo, ...parsedData.machineInfo },
+        dimensions: { ...feederData.dimensions, ...parsedData.dimensions },
+      }
+
+      // Force a complete update of the form data
+      updateFeederData(feederType, updatedData)
+
+      setShowPasteModal(false)
+      setPasteText("")
+      setParsedData(null)
+      showTempError("Data imported successfully!", true)
     }
+  }
+
+  const handleAnalyzeData = () => {
+    parseData()
   }
 
   return (
@@ -470,7 +542,13 @@ export default function FeederPage({
                 Clear Data
               </button>
 
-              
+              <button
+                onClick={handlePasteData}
+                className="bg-white border border-black text-black px-4 py-2 rounded-md flex items-center"
+              >
+                <Clipboard className="mr-2 h-4 w-4" />
+                Paste Data
+              </button>
             </div>
 
             <div className="absolute bottom-6 right-6 flex print:hidden">
@@ -536,19 +614,19 @@ export default function FeederPage({
           </div>
         )}
 
-        {/* Error Toast */}
+        {/* Error/Success Toast */}
         {showError && (
           <div className={`fixed inset-0 flex items-center justify-center z-[100] pointer-events-none print:hidden`}>
-          <div
-            className={`${
-              errorMessage.includes("successfully")
-                ? "bg-green-100 border-2 border-green-500 text-green-700"
-                : "bg-red-100 border-2 border-red-500 text-red-700"
-            } rounded-md shadow-lg p-4 max-w-xs text-center font-medium`}
-          >
-            {errorMessage}
+            <div
+              className={`${
+                errorMessage.includes("successfully")
+                  ? "bg-green-100 border-2 border-green-500 text-green-700"
+                  : "bg-red-100 border-2 border-red-500 text-red-700"
+              } rounded-md shadow-lg p-4 max-w-xs text-center font-medium`}
+            >
+              {errorMessage}
+            </div>
           </div>
-        </div>
         )}
 
         {/* Success Modal */}
@@ -618,161 +696,125 @@ export default function FeederPage({
           </div>
         )}
 
-        {/* Contact Form */}
+        {/* Contact Form - Using vanilla DOM implementation */}
         {showContactForm && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
-            <div className="bg-white rounded-lg p-6 shadow-md w-[500px] relative">
-              {/* Add close button */}
-              <button
-                onClick={() => setShowContactForm(false)}
-                className="absolute top-2 right-2 text-gray-500 hover:text-black text-xl"
-                aria-label="Close"
-              >
-                &times;
-              </button>
-
-              <h2 className="text-xl font-bold mb-4">Send Your Configuration</h2>
-              <p className="text-sm text-gray-600 mb-4">
-                Please provide your contact information to send the feeder configuration.
-              </p>
-
-              <div className="mb-4">
-                <label htmlFor="name" className="block text-sm font-medium mb-1">
-                  Comapny Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  placeholder="Company Name"
-                  className="border w-full p-2 rounded"
-                  value={contactForm.name}
-                  onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label htmlFor="email" className="block text-sm font-medium mb-1">
-                  Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  placeholder="Email"
-                  className="border w-full p-2 rounded"
-                  value={contactForm.email}
-                  onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label htmlFor="phone" className="block text-sm font-medium mb-1">
-                  Contact Number 
-                </label>
-                <input
-                  type="tel"
-                  id="phone"
-                  placeholder="Contact Number (optional)"
-                  className="border w-full p-2 rounded"
-                  value={contactForm.contactNo}
-                  onChange={(e) => setContactForm({ ...contactForm, contactNo: e.target.value })}
-                  
-                />
-              </div>
-
-              <div className="mb-6">
-                <label htmlFor="message" className="block text-sm font-medium mb-1">
-                  Message
-                </label>
-                <textarea
-                  id="message"
-                  placeholder="Additional message (optional)"
-                  rows={3}
-                  className="border w-full p-2 rounded"
-                  value={contactForm.message}
-                  onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
-                />
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <button
-                  className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded flex items-center"
-                  onClick={handleSaveAsPDF}
-                >
-                  <Printer className="mr-2 h-4 w-4" />
-                  Save PDF
-                </button>
-                <button
-                  className="bg-black text-white px-4 py-2 rounded flex items-center"
-                  onClick={handleSendEmail}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <svg
-                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      Sending...
-                    </>
-                  ) : (
-                    "Submit"
-                  )}
-                </button>
-              </div>
-            </div>
+            <VanillaContactForm
+              onClose={() => setShowContactForm(false)}
+              onSave={handleSaveAsPDF}
+              onSubmit={handleSendEmail}
+              isSubmitting={isSubmitting}
+            />
           </div>
         )}
 
         {/* Paste Data Modal */}
         {showPasteModal && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
-            <div className="bg-white rounded-lg p-6 shadow-md w-[600px]">
+            <div className="bg-white rounded-lg p-6 shadow-md w-[600px] max-h-[80vh] overflow-auto">
               <h2 className="text-xl font-bold mb-4">Paste Configuration Data</h2>
               <p className="text-sm text-gray-600 mb-4">
-                Paste your configuration data below. The system will try to extract machine information and dimensions.
+                Paste your configuration data below. The system will automatically extract machine information and
+                dimensions.
               </p>
 
-              <textarea
-                value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
-                placeholder="Paste your configuration data here..."
-                rows={10}
-                className="border w-full p-2 rounded mb-4"
-              />
+              {!showParsePreview ? (
+                <>
+                  <textarea
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.target.value)}
+                    placeholder="Paste your configuration data here..."
+                    rows={10}
+                    className="border w-full p-2 rounded mb-4"
+                  />
 
-              <div className="flex justify-end gap-2">
-                <button
-                  className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded"
-                  onClick={() => setShowPasteModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="bg-black text-white px-4 py-2 rounded"
-                  onClick={processPastedData}
-                  disabled={!pasteText.trim()}
-                >
-                  Import Data
-                </button>
-              </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded"
+                      onClick={() => setShowPasteModal(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded flex items-center"
+                      onClick={handleAnalyzeData}
+                      disabled={!pasteText.trim()}
+                    >
+                      Analyze Data
+                    </button>
+                    <button
+                      className="bg-black text-white px-4 py-2 rounded flex items-center"
+                      onClick={applyParsedData}
+                      disabled={!pasteText.trim()}
+                    >
+                      <Check className="mr-2 h-4 w-4" />
+                      Import Data
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <h3 className="font-medium text-lg mb-2">Detected Machine Information</h3>
+                    <div className="bg-gray-50 p-3 rounded border">
+                      {parsedData && Object.keys(parsedData.machineInfo).length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(parsedData.machineInfo).map(([id, value]) => {
+                            const field = machineInfoFields.find((f) => f.id === id)
+                            return (
+                              <div key={id} className="flex justify-between">
+                                <span className="font-medium">{field?.label || id}:</span>
+                                <span className="text-green-600">{value}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 italic">No machine information detected</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <h3 className="font-medium text-lg mb-2">Detected Dimensions</h3>
+                    <div className="bg-gray-50 p-3 rounded border">
+                      {parsedData && Object.keys(parsedData.dimensions).length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(parsedData.dimensions).map(([key, value]) => (
+                            <div key={key} className="flex justify-between">
+                              <span className="font-medium">
+                                {key} ({dimensionDescriptions[key]}):
+                              </span>
+                              <span className="text-green-600">{value} mm</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 italic">No dimensions detected</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded"
+                      onClick={() => {
+                        setShowParsePreview(false)
+                        setParsedData(null)
+                      }}
+                    >
+                      Back
+                    </button>
+                    <button
+                      className="bg-black text-white px-4 py-2 rounded flex items-center"
+                      onClick={applyParsedData}
+                    >
+                      <Check className="mr-2 h-4 w-4" />
+                      Apply Data
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

@@ -1,27 +1,76 @@
 import { type NextRequest, NextResponse } from "next/server"
 import nodemailer from "nodemailer"
 
-// Configure email transporter
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USERNAME,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-})
-
+// Create a more resilient email sender that works with browser translations
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, phone, message, feederType, title, formData } = await req.json()
+    // Add CORS headers to prevent issues with cross-origin requests
+    const headers = new Headers({
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    })
 
+    // Handle preflight requests
+    if (req.method === "OPTIONS") {
+      return new NextResponse(null, { status: 204, headers })
+    }
+
+    // Log request for debugging
+    console.log("Email API called with method:", req.method)
+
+    // Parse the request body safely
+    let data
+    try {
+      data = await req.json()
+    } catch (error) {
+      console.error("Failed to parse request body:", error)
+      return new NextResponse(JSON.stringify({ error: "Invalid request format" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...headers },
+      })
+    }
+
+    // Extract required fields with fallbacks
+    const name = data?.name || ""
+    const email = data?.email || ""
+    const phone = data?.phone || "Not provided"
+    const message = data?.message || ""
+    const feederType = data?.feederType || "unknown"
+    const title = data?.title || "Feeder Configuration"
+    const formData = data?.formData || ""
+
+
+    // Validate required fields
     if (!name || !email) {
-      return NextResponse.json({ error: "Name and email are required" }, { status: 400 })
+      return new NextResponse(JSON.stringify({ error: "Name and email are required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...headers },
+      })
+    }
+
+    // Configure email transporter with explicit error handling
+    let transporter
+    try {
+      transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: process.env.EMAIL_USERNAME,
+          pass: process.env.EMAIL_PASSWORD,
+        },
+      })
+    } catch (error) {
+      console.error("Failed to create email transporter:", error)
+      return new NextResponse(JSON.stringify({ error: "Email service configuration error" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...headers },
+      })
     }
 
     // Convert the plain text formData to HTML format
     const formDataHtml = formatDataToHtml(formData)
 
-    // Send email with HTML content
+    // Create email options
     const mailOptions = {
       from: process.env.EMAIL_USERNAME,
       to: process.env.RECIPIENT_EMAIL,
@@ -32,7 +81,7 @@ export async function POST(req: NextRequest) {
           <hr style="border: 1px solid #eee; margin-bottom: 15px;">
           <p><strong>Name:</strong> ${name}</p>
           <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Phone:</strong> ${phone || "Not provided"}</p>
+          <p><strong>Phone:</strong> ${phone}</p>
           
           ${
             message
@@ -50,9 +99,9 @@ export async function POST(req: NextRequest) {
       text: `
 Contact Information:
 -------------------
-Company Name: ${name}
+Name: ${name}
 Email: ${email}
-Contact No.: ${phone || "Not provided"}
+Phone: ${phone}
 
 ${message ? `Message:\n${message}\n\n` : ""}
 
@@ -62,12 +111,29 @@ ${formData}
       `,
     }
 
-    await transporter.sendMail(mailOptions)
+    // Send the email with proper error handling
+    try {
+      await transporter.sendMail(mailOptions)
 
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error("Error sending email:", error)
-    return NextResponse.json({ error: "Failed to send email" }, { status: 500 })
+      return new NextResponse(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...headers },
+      })
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error("Unknown error")
+      console.error("Unexpected error in email API:", err)
+      return new NextResponse(JSON.stringify({ error: "Server error", details: err.message }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error("Unknown error")
+    console.error("Unexpected error in email API:", err)
+    return new NextResponse(JSON.stringify({ error: "Server error", details: err.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
   }
 }
 
@@ -139,4 +205,16 @@ function formatDataToHtml(formData: string): string {
   }
 
   return html
+}
+
+// Add OPTIONS handler for CORS preflight requests
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  })
 }

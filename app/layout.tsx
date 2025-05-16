@@ -18,6 +18,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script src="/js/direct-submit.js" defer></script>
+      </head>
       <body className={inter.className}>
         <FormProvider>{children}</FormProvider>
       </body>

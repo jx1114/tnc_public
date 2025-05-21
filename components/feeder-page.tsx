@@ -71,39 +71,47 @@ export default function FeederPage({
   const router = useRouter()
   const pathname = usePathname()
 
-  const [isAnimating, setIsAnimating] = useState(false)
+  const [showInactivityPopup, setShowInactivityPopup] = useState(false)
   const inactivityTimer = useRef<NodeJS.Timeout | null>(null)
 
-  // Inactivity detection: 3s idle triggers animation
-  useEffect(() => {
-    let animationTimeout: NodeJS.Timeout
-    const resetTimer = () => {
-      if (inactivityTimer.current) {
-        clearTimeout(inactivityTimer.current)
-      }
-      setIsAnimating(false)
-      inactivityTimer.current = setTimeout(() => {
-        setIsAnimating(true)
-
-        animationTimeout = setTimeout(() => {
-          resetTimer() // restart listening for inactivity
-        }, 3000)
-      }, 8000)
+  function startInactivityTimer() {
+    // Clear any existing timers first
+    if (inactivityTimer.current) {
+      clearTimeout(inactivityTimer.current)
     }
 
-    const events = ["mousemove", "keydown", "mousedown", "touchstart"]
-    events.forEach((event) => window.addEventListener(event, resetTimer))
+     // Set new inactivity timer (30 seconds)
+     inactivityTimer.current = setTimeout(() => {
+      setShowInactivityPopup(true)
+    }, 30000) // 30 seconds of inactivity
+  }
 
-    resetTimer()
+  function resetInactivityTimer() {
+    // Hide popup if showing
+    if (showInactivityPopup) {
+      setShowInactivityPopup(false)
+    }
+    
+    // Restart the timer
+    startInactivityTimer()
+  }
+
+  useEffect(() => {
+    const handleUserActivity = () => {
+      resetInactivityTimer()
+    }
+
+    const events = ["mousemove", "keydown", "mousedown", "touchstart", "scroll"]
+    events.forEach((event) => window.addEventListener(event, handleUserActivity))
+
+    // Initialize the timer on mount
+    startInactivityTimer()
 
     return () => {
-      events.forEach((event) => window.removeEventListener(event, resetTimer))
-      if (inactivityTimer.current) {
-        clearTimeout(inactivityTimer.current)
-      }
-      if (animationTimeout) clearTimeout(animationTimeout)
+      events.forEach((event) => window.removeEventListener(event, handleUserActivity))
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
     }
-  }, [])
+  }, [showInactivityPopup])
 
   const allDimensionsFilled = () => {
     return Object.keys(dimensionDescriptions).every((key) => feederData.dimensions[key])
@@ -420,22 +428,52 @@ export default function FeederPage({
   return (
     <>
       <NavigationMenu />
-      <div className="bg-[#fdf5e6] min-h-screen w-[1050px] overflow-auto mx-auto p-4 print:p-0 light">
+      <div className="bg-[#f2f4f4] min-h-screen w-[1050px] overflow-auto mx-auto p-4 print:p-0 light">
+            {/* Inactivity Popup */}
+            {showInactivityPopup && (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
+              
+              <div className="absolute animate-floatAround">
+                <Image
+                  src="/tnc-home-logo-nw.png"
+                  alt="TNC Logo"
+                  width={60}
+                  height={60}
+                  className="drop-shadow-lg"
+                />
+              </div>
+
+                {/* Second Logo - New Counter-Rotation Animation */}
+              <div className="absolute animate-floatAroundReverse">
+                <Image
+                  src="/tnc-home-logo-nw.png"
+                  alt="TNC Logo"
+                  width={60}
+                  height={60}
+                  className="drop-shadow-lg"
+                />
+              </div>
+
+              {/* Popup Container */}
+              <div className="relative bg-white p-8 rounded-lg shadow-xl text-center max-w-md z-10 animate-fadeIn mx-4">
+
+              <h2 className="text-2xl font-bold mb-4">We're here waiting for you to come back 😊</h2>
+              <p className="text-gray-600 mb-6">
+                Don't say goodbye to us... 
+              </p>
+              
+            </div>
+          </div>
+        )}
+
         <div ref={printRef} className="print-container flex flex-col h-[297mm] p-4 print:p-0 relative">
-          <h1 className="text-2xl font-bold text-center mb-4 flex justify-center space-x-1">
-            {title.split("").map((char, idx) => (
-              <span
-                key={idx}
-                className={isAnimating ? "wave" : ""}
-                style={isAnimating ? { animationDelay: `${idx * 0.1}s` } : {}}
-              >
-                {char}
-              </span>
-            ))}
+            {/* Original title */}
+             <h1 className="text-2xl font-bold text-center mb-4">
+            {title}
           </h1>
 
           {/* Machine Information */}
-          <div className="border bg-[#fffafa] rounded-md p-3 mb-3">
+          <div className="border bg-white rounded-md p-3 mb-3">
             <h2 className="text-lg font-medium mb-2">Machine Information</h2>
             <div className="grid grid-cols-3 gap-4">
               {machineInfoFields.map((field) => (
@@ -499,7 +537,7 @@ export default function FeederPage({
           </div>
 
           {/* Feeder Design */}
-          <div className="border bg-[#fffafa] rounded-md p-4 flex-grow mb-3 relative">
+          <div className="border bg-white rounded-md p-4 flex-grow mb-3 relative">
             <h2 className="text-lg font-medium mb-2">Feeder Info</h2>
             <p className="text-sm italic text-red-500 mb-2">* Set value as 0 if there is no dimension</p>
             <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
@@ -542,13 +580,7 @@ export default function FeederPage({
                 Clear Data
               </button>
 
-              <button
-                onClick={handlePasteData}
-                className="bg-white border border-black text-black px-4 py-2 rounded-md flex items-center"
-              >
-                <Clipboard className="mr-2 h-4 w-4" />
-                Paste Data
-              </button>
+              
             </div>
 
             <div className="absolute bottom-6 right-6 flex print:hidden">
@@ -820,30 +852,79 @@ export default function FeederPage({
         )}
       </div>
 
-      <style jsx>{`
-        .wave {
-          display: inline-block;
-          animation: fallBounce 2.2s ease-out forwards;
-          color: rgb(187, 57, 57);
-        }
+      <style jsx global>{`
+         @keyframes floatAround {
+    0% {
+      transform: translate(-50%, -50%) rotate(0deg);
+      top: 10%;
+      left: 10%;
+    }
+    25% {
+      transform: translate(-50%, -50%) rotate(0deg);
+      top: 10%;
+      left: 80%;
+    }
+    50% {
+      transform: translate(-50%, -50%) rotate(0deg);
+      top: 80%;
+      left: 80%;
+    }
+    75% {
+      transform: translate(-50%, -50%) rotate(0deg);
+      top: 80%;
+      left: 20%;
+    }
+    100% {
+      transform: translate(-50%, -50%) rotate(0deg);
+      top: 10%;
+      left: 10%;
+    }
+  }
 
-        @keyframes fallBounce {
-          0% {
-            transform: translateY(0);
-          }
-          40% {
-            transform: translateY(60px);
-          }
-          60% {
-            transform: translateY(30px);
-          }
-          80% {
-            transform: translateY(45px);
-          }
-          100% {
-            transform: translateY(0);
-          }
-        }
+   @keyframes floatAroundReverse {
+    0% {
+      transform: translate(-50%, -50%) rotate(0deg);
+      top: 90%;
+      left: 90%;
+    }
+    25% {
+      transform: translate(-50%, -50%) rotate(0deg);
+      top: 90%;
+      left: 20%;
+    }
+    50% {
+      transform: translate(-50%, -50%) rotate(0deg);
+      top: 20%;
+      left: 20%;
+    }
+    75% {
+      transform: translate(-50%, -50%) rotate(0deg);
+      top: 20%;
+      left: 80%;
+    }
+    100% {
+      transform: translate(-50%, -50%) rotate(0deg);
+      top: 90%;
+      left: 90%;
+    }
+  }
+
+    .animate-floatAround {
+    animation: floatAround 15s infinite linear;
+  }
+
+  .animate-floatAroundReverse {
+    animation: floatAroundReverse 18s infinite linear;
+  }
+
+  .animate-fadeIn {
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+
       `}</style>
     </>
   )

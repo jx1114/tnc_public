@@ -34,22 +34,22 @@ export default function NavigationMenu() {
     <div className="bg-white print:hidden">
       <div className="container mx-auto px-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-4 gap-2 sm:gap-0">
-          {/* Brand Name */}
+          {/* Brand Logo */}
           <div
-            className="text-lg text-red-800 font-bold cursor-pointer whitespace-nowrap"
+            className="cursor-pointer"
             onClick={() => router.push("/")}
             style={{ flexShrink: 0 }}
           >
-            TNC Feeder
+            <img src="/tnc-home-logo.png" alt="TNC Feeder Logo" className="h-12 sm:h-16" />
           </div>
 
           {/* Navigation Buttons */}
           <div className="flex flex-wrap justify-start sm:justify-end items-center gap-2 sm:gap-4">
             <button
               onClick={() => router.push("/")}
-              className="px-3 py-1 text-sm rounded-md bg-red-800 hover:bg-black text-white flex items-center"
+              className="px-4 py-2 rounded-md bg-gradient-to-r from-red-800 to-red-700 hover:from-red-700 hover:to-red-600 text-white flex items-center transition-all duration-300 shadow-md hover:shadow-lg"
             >
-              <Home className="mr-1 h-4 w-4" />
+              <Home className="mr-2 h-4 w-4" />
               Home
             </button>
 
@@ -57,7 +57,7 @@ export default function NavigationMenu() {
             <div className="relative">
               <button
                 onClick={toggleSingleDropdown}
-                className="px-3 py-1 text-sm rounded-md bg-red-800 hover:bg-black text-white flex items-center"
+                className="px-4 py-2 rounded-md bg-gradient-to-r from-red-800 to-red-700 hover:from-red-700 hover:to-red-600 text-white flex items-center transition-all duration-300 shadow-md hover:shadow-lg"
               >
                 Single
                 <ChevronDown className="ml-1 h-4 w-4" />
@@ -92,7 +92,7 @@ export default function NavigationMenu() {
             <div className="relative">
               <button
                 onClick={toggleSetDropdown}
-                className="px-3 py-1 text-sm rounded-md bg-red-800 hover:bg-black text-white flex items-center"
+                className="px-4 py-2 rounded-md bg-gradient-to-r from-red-800 to-red-700 hover:from-red-700 hover:to-red-600 text-white flex items-center transition-all duration-300 shadow-md hover:shadow-lg"
               >
                 Set
                 <ChevronDown className="ml-1 h-4 w-4" />

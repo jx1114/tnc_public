@@ -1,87 +1,88 @@
 import { type NextRequest, NextResponse } from "next/server"
 import nodemailer from "nodemailer"
 
-// Create a more resilient email sender that works with browser translations
+// Configure email transporter
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USERNAME,
+    pass: process.env.EMAIL_PASSWORD,
+  },
+})
+
+// Function to get client IP address
+function getClientIP(request: NextRequest): string {
+  // Check various headers for the real IP address
+  const forwarded = request.headers.get("x-forwarded-for")
+  const realIP = request.headers.get("x-real-ip")
+  const cfConnectingIP = request.headers.get("cf-connecting-ip") // Cloudflare
+  const xClientIP = request.headers.get("x-client-ip")
+  const xForwardedFor = request.headers.get("x-forwarded-for")
+
+  // If behind a proxy, x-forwarded-for might contain multiple IPs
+  if (forwarded) {
+    return forwarded.split(",")[0].trim()
+  }
+
+  // Try other headers
+  if (realIP) return realIP
+  if (cfConnectingIP) return cfConnectingIP
+  if (xClientIP) return xClientIP
+
+  // Fallback if no IP headers are found
+  return "Unknown"
+}
+
+// Function to get additional request information
+function getRequestInfo(request: NextRequest) {
+  const userAgent = request.headers.get("user-agent") || "Unknown"
+  const referer = request.headers.get("referer") || "Direct"
+  const acceptLanguage = request.headers.get("accept-language") || "Unknown"
+
+  return {
+    userAgent,
+    referer,
+    acceptLanguage,
+    timestamp: new Date().toISOString(),
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
-    // Add CORS headers to prevent issues with cross-origin requests
-    const headers = new Headers({
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    })
+    const { name, email, phone, message, feederType, title, formData } = await req.json()
 
-    // Handle preflight requests
-    if (req.method === "OPTIONS") {
-      return new NextResponse(null, { status: 204, headers })
-    }
-
-    // Log request for debugging
-    console.log("Email API called with method:", req.method)
-
-    // Parse the request body safely
-    let data
-    try {
-      data = await req.json()
-    } catch (error) {
-      console.error("Failed to parse request body:", error)
-      return new NextResponse(JSON.stringify({ error: "Invalid request format" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json", ...headers },
-      })
-    }
-
-    // Extract required fields with fallbacks
-    const name = data?.name || ""
-    const email = data?.email || ""
-    const phone = data?.phone || "Not provided"
-    const message = data?.message || ""
-    const feederType = data?.feederType || "unknown"
-    const title = data?.title || "Feeder Configuration"
-    const formData = data?.formData || ""
-
-
-    // Validate required fields
     if (!name || !email) {
-      return new NextResponse(JSON.stringify({ error: "Name and email are required" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json", ...headers },
-      })
+      return NextResponse.json({ error: "Name and email are required" }, { status: 400 })
     }
 
-    // Configure email transporter with explicit error handling
-    let transporter
-    try {
-      transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USERNAME,
-          pass: process.env.EMAIL_PASSWORD,
-        },
-      })
-    } catch (error) {
-      console.error("Failed to create email transporter:", error)
-      return new NextResponse(JSON.stringify({ error: "Email service configuration error" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...headers },
-      })
-    }
+    // Get client IP and additional request information
+    const clientIP = getClientIP(req)
+    const requestInfo = getRequestInfo(req)
 
     // Convert the plain text formData to HTML format
     const formDataHtml = formatDataToHtml(formData)
 
-    // Create email options
+    // Send email with HTML content including IP address
     const mailOptions = {
       from: process.env.EMAIL_USERNAME,
       to: process.env.RECIPIENT_EMAIL,
-      subject: `Feeder Configuration from ${name}`,
+      subject: `Feeder Configuration from ${name} [IP: ${clientIP}]`,
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6;">
           <h2 style="color: #333;">Contact Information</h2>
           <hr style="border: 1px solid #eee; margin-bottom: 15px;">
           <p><strong>Name:</strong> ${name}</p>
           <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Phone:</strong> ${phone}</p>
+          <p><strong>Phone:</strong> ${phone || "Not provided"}</p>
+          
+          <h2 style="color: #333; margin-top: 50px;">Request Details</h2>
+          <hr style="border: 1px solid #eee; margin-bottom: 15px;">
+          <p><strong>IP Address:</strong> <span style="background-color: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: monospace;">${clientIP}</span></p>
+          <p><strong>Timestamp:</strong> ${requestInfo.timestamp}</p>
+          <p><strong>User Agent:</strong> ${requestInfo.userAgent}</p>
+          <p><strong>Referrer:</strong> ${requestInfo.referer}</p>
+          <p><strong>Accept Language:</strong> ${requestInfo.acceptLanguage}</p>
+          <p><strong>Feeder Type:</strong> ${feederType}</p>
           
           ${
             message
@@ -93,6 +94,14 @@ export async function POST(req: NextRequest) {
           <h2 style="color: #333; margin-top: 30px;">FEEDER CONFIGURATION DETAILS</h2>
           <hr style="border: 1px solid #eee; margin-bottom: 15px;">
           ${formDataHtml}
+          
+          <div style="margin-top: 50px; padding: 15px; background-color: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff;">
+            <h4 style="margin: 0 0 10px 0; color: #333;">Security Information</h4>
+            <p style="margin: 0; font-size: 12px; color: #666;">
+              This request was submitted from IP address <strong>${clientIP}</strong> on ${new Date(requestInfo.timestamp).toLocaleString()}.
+              Please verify the legitimacy of this request if it seems suspicious.
+            </p>
+          </div>
         </div>
       `,
       // Include a plain text version for email clients that don't support HTML
@@ -101,39 +110,34 @@ Contact Information:
 -------------------
 Name: ${name}
 Email: ${email}
-Phone: ${phone}
+Phone: ${phone || "Not provided"}
+
+Request Details:
+---------------
+IP Address: ${clientIP}
+Timestamp: ${requestInfo.timestamp}
+User Agent: ${requestInfo.userAgent}
+Referrer: ${requestInfo.referer}
+Accept Language: ${requestInfo.acceptLanguage}
+Feeder Type: ${feederType}
 
 ${message ? `Message:\n${message}\n\n` : ""}
 
 FEEDER CONFIGURATION DETAILS
 ===========================
 ${formData}
+
+Security Information:
+This request was submitted from IP address ${clientIP} on ${new Date(requestInfo.timestamp).toLocaleString()}.
       `,
     }
 
-    // Send the email with proper error handling
-    try {
-      await transporter.sendMail(mailOptions)
+    await transporter.sendMail(mailOptions)
 
-      return new NextResponse(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...headers },
-      })
-    } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error("Unknown error")
-      console.error("Unexpected error in email API:", err)
-      return new NextResponse(JSON.stringify({ error: "Server error", details: err.message }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      })
-    }
-  } catch (error: unknown) {
-    const err = error instanceof Error ? error : new Error("Unknown error")
-    console.error("Unexpected error in email API:", err)
-    return new NextResponse(JSON.stringify({ error: "Server error", details: err.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    })
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Error sending email:", error)
+    return NextResponse.json({ error: "Failed to send email" }, { status: 500 })
   }
 }
 
@@ -205,16 +209,4 @@ function formatDataToHtml(formData: string): string {
   }
 
   return html
-}
-
-// Add OPTIONS handler for CORS preflight requests
-export async function OPTIONS(req: NextRequest) {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  })
 }

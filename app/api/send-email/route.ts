@@ -28,81 +28,47 @@ function getClientIP(request: NextRequest): string {
   return "Unknown"
 }
 
-// Function to get IP geolocation with multiple fallback services
+// Function to get IP geolocation using ipinfo.io only
 async function getIPLocation(ip: string): Promise<string> {
   if (ip === "Unknown" || ip === "127.0.0.1" || ip.startsWith("192.168.") || ip.startsWith("10.")) {
     return "Local/Private Network"
   }
 
-  // Try multiple services in order
-  const services = [
-    {
-      name: "ipinfo.io",
-      url: `https://ipinfo.io/${ip}/json`,
-      parser: (data: any) => {
-        if (data.status === "success") {
-          if (data.city && data.regionName && data.country) {
-            return `${data.city}, ${data.regionName}, ${data.country}`
-          } else if (data.country) {
-            return data.country
-          }
-        }
-        return null
-      },
-    },
-    
-   
-  ]
-
-  for (const service of services) {
-    try {
-      console.log(`Trying ${service.name} for IP ${ip}`)
-
-      const response = await fetch(service.url, {
-        method: "GET",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; FeederApp/1.0)",
-        },
-        // Add timeout
-        signal: AbortSignal.timeout(5000),
-      })
-
-      if (!response.ok) {
-        console.log(`${service.name} returned status ${response.status}`)
-        continue
-      }
-
-      const data = await response.json()
-      console.log(`${service.name} response:`, data)
-
-      const location = service.parser(data)
-      if (location) {
-        console.log(`Successfully got location from ${service.name}: ${location}`)
-        return location
-      }
-    } catch (error) {
-      console.error(`Error with ${service.name}:`, error)
-      continue
-    }
-  }
-
-  // If all services fail, try a simple approach
   try {
-    console.log(`Trying simple lookup for IP ${ip}`)
-    const response = await fetch(`https://get.geojs.io/v1/ip/geo/${ip}.json`)
-    const data = await response.json()
-    console.log("geojs.io response:", data)
+    console.log(`Getting location for IP ${ip} using ipinfo.io`)
 
+    const response = await fetch(`https://ipinfo.io/${ip}/json`, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; FeederApp/1.0)",
+        Accept: "application/json",
+      },
+      // Add timeout
+      signal: AbortSignal.timeout(10000),
+    })
+
+    if (!response.ok) {
+      console.log(`ipinfo.io returned status ${response.status}`)
+      return `Location lookup failed (HTTP ${response.status}) for IP ${ip}`
+    }
+
+    const data = await response.json()
+    console.log("ipinfo.io response:", data)
+
+    // ipinfo.io returns: city, region, country, loc (lat,lng), etc.
     if (data.city && data.region && data.country) {
       return `${data.city}, ${data.region}, ${data.country}`
     } else if (data.country) {
       return data.country
+    } else if (data.loc) {
+      return `Coordinates: ${data.loc}`
     }
-  } catch (error) {
-    console.error("Error with geojs.io:", error)
-  }
 
-  return `Location lookup failed for IP ${ip}`
+    return `Partial location data for IP ${ip}`
+  } catch (error) {
+    console.error("Error with ipinfo.io:", error)
+    return `Location lookup failed for IP ${ip} - ${error instanceof Error ? error.message : String(error)}`
+  }
 }
 
 // Function to get request information
@@ -150,6 +116,7 @@ export async function POST(req: NextRequest) {
           <p><strong>Phone:</strong> ${phone || "Not provided"}</p>
           <p><strong>IP Address:</strong> <span style="background-color: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: monospace;">${clientIP}</span></p>
           <p><strong>Location:</strong> ${ipLocation}</p>
+      
           
           ${
             message

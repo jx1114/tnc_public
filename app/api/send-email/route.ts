@@ -37,8 +37,8 @@ async function getIPLocation(ip: string): Promise<string> {
   // Try multiple services in order
   const services = [
     {
-      name: "ip-api.com",
-      url: `http://ip-api.com/json/${ip}`,
+      name: "ipinfo.io",
+      url: `https://ipinfo.io/${ip}/json`,
       parser: (data: any) => {
         if (data.status === "success") {
           if (data.city && data.regionName && data.country) {
@@ -62,18 +62,7 @@ async function getIPLocation(ip: string): Promise<string> {
         return null
       },
     },
-    {
-      name: "ipinfo.io",
-      url: `https://ipinfo.io/${ip}/json`,
-      parser: (data: any) => {
-        if (data.city && data.region && data.country) {
-          return `${data.city}, ${data.region}, ${data.country}`
-        } else if (data.country) {
-          return data.country
-        }
-        return null
-      },
-    },
+   
   ]
 
   for (const service of services) {

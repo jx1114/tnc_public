@@ -50,18 +50,7 @@ async function getIPLocation(ip: string): Promise<string> {
         return null
       },
     },
-    {
-      name: "ipapi.co",
-      url: `https://ipapi.co/${ip}/json/`,
-      parser: (data: any) => {
-        if (data.city && data.region && data.country_name) {
-          return `${data.city}, ${data.region}, ${data.country_name}`
-        } else if (data.country_name) {
-          return data.country_name
-        }
-        return null
-      },
-    },
+    
    
   ]
 

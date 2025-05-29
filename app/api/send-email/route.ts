@@ -28,28 +28,103 @@ function getClientIP(request: NextRequest): string {
   return "Unknown"
 }
 
-// Function to get IP geolocation
+// Function to get IP geolocation with multiple fallback services
 async function getIPLocation(ip: string): Promise<string> {
   if (ip === "Unknown" || ip === "127.0.0.1" || ip.startsWith("192.168.") || ip.startsWith("10.")) {
     return "Local/Private Network"
   }
 
-  try {
-    // Using ipapi.co free service (1000 requests per month)
-    const response = await fetch(`https://ipapi.co/${ip}/json/`)
-    const data = await response.json()
+  // Try multiple services in order
+  const services = [
+    {
+      name: "ip-api.com",
+      url: `http://ip-api.com/json/${ip}`,
+      parser: (data: any) => {
+        if (data.status === "success") {
+          if (data.city && data.regionName && data.country) {
+            return `${data.city}, ${data.regionName}, ${data.country}`
+          } else if (data.country) {
+            return data.country
+          }
+        }
+        return null
+      },
+    },
+    {
+      name: "ipapi.co",
+      url: `https://ipapi.co/${ip}/json/`,
+      parser: (data: any) => {
+        if (data.city && data.region && data.country_name) {
+          return `${data.city}, ${data.region}, ${data.country_name}`
+        } else if (data.country_name) {
+          return data.country_name
+        }
+        return null
+      },
+    },
+    {
+      name: "ipinfo.io",
+      url: `https://ipinfo.io/${ip}/json`,
+      parser: (data: any) => {
+        if (data.city && data.region && data.country) {
+          return `${data.city}, ${data.region}, ${data.country}`
+        } else if (data.country) {
+          return data.country
+        }
+        return null
+      },
+    },
+  ]
 
-    if (data.city && data.region && data.country_name) {
-      return `${data.city}, ${data.region}, ${data.country_name}`
-    } else if (data.country_name) {
-      return data.country_name
+  for (const service of services) {
+    try {
+      console.log(`Trying ${service.name} for IP ${ip}`)
+
+      const response = await fetch(service.url, {
+        method: "GET",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; FeederApp/1.0)",
+        },
+        // Add timeout
+        signal: AbortSignal.timeout(5000),
+      })
+
+      if (!response.ok) {
+        console.log(`${service.name} returned status ${response.status}`)
+        continue
+      }
+
+      const data = await response.json()
+      console.log(`${service.name} response:`, data)
+
+      const location = service.parser(data)
+      if (location) {
+        console.log(`Successfully got location from ${service.name}: ${location}`)
+        return location
+      }
+    } catch (error) {
+      console.error(`Error with ${service.name}:`, error)
+      continue
     }
-
-    return "Location not available"
-  } catch (error) {
-    console.error("Error fetching IP location:", error)
-    return "Location not available"
   }
+
+  // If all services fail, try a simple approach
+  try {
+    console.log(`Trying simple lookup for IP ${ip}`)
+    const response = await fetch(`https://get.geojs.io/v1/ip/geo/${ip}.json`)
+    const data = await response.json()
+    console.log("geojs.io response:", data)
+
+    if (data.city && data.region && data.country) {
+      return `${data.city}, ${data.region}, ${data.country}`
+    } else if (data.country) {
+      return data.country
+    }
+  } catch (error) {
+    console.error("Error with geojs.io:", error)
+  }
+
+  return `Location lookup failed for IP ${ip}`
 }
 
 // Function to get request information
@@ -74,8 +149,11 @@ export async function POST(req: NextRequest) {
     const clientIP = getClientIP(req)
     const requestInfo = getRequestInfo(req)
 
+    console.log(`Processing request from IP: ${clientIP}`)
+
     // Get IP location
     const ipLocation = await getIPLocation(clientIP)
+    console.log(`Final location result: ${ipLocation}`)
 
     // Convert the plain text formData to HTML format
     const formDataHtml = formatDataToHtml(formData)

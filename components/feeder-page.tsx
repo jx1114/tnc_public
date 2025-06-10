@@ -1,13 +1,14 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useRef, useEffect } from "react"
 import Image from "next/image"
 import { useRouter, usePathname } from "next/navigation"
 import { useFormContext } from "@/context/FormContext"
 import NavigationMenu from "./navigation-menu"
 import ModelViewer from "./model-viewer"
-import { RefreshCw, Send, Clipboard, Check } from "lucide-react"
-import VanillaContactForm from "./vanilla-contact-form"
+import { Printer, RefreshCw, Send, Check } from "lucide-react"
 
 export type FeederPageProps = {
   title: string
@@ -58,6 +59,7 @@ export default function FeederPage({
   const [showModelViewer, setShowModelViewer] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [showContactForm, setShowContactForm] = useState(false)
+  const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "", message: "" })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPasteModal, setShowPasteModal] = useState(false)
   const [pasteText, setPasteText] = useState("")
@@ -66,6 +68,8 @@ export default function FeederPage({
     dimensions: Record<string, string>
   } | null>(null)
   const [showParsePreview, setShowParsePreview] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [isDragOver, setIsDragOver] = useState(false)
 
   const printRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -80,8 +84,8 @@ export default function FeederPage({
       clearTimeout(inactivityTimer.current)
     }
 
-     // Set new inactivity timer (30 seconds)
-     inactivityTimer.current = setTimeout(() => {
+    // Set new inactivity timer (30 seconds)
+    inactivityTimer.current = setTimeout(() => {
       setShowInactivityPopup(true)
     }, 30000) // 30 seconds of inactivity
   }
@@ -91,7 +95,7 @@ export default function FeederPage({
     if (showInactivityPopup) {
       setShowInactivityPopup(false)
     }
-    
+
     // Restart the timer
     startInactivityTimer()
   }
@@ -139,7 +143,7 @@ export default function FeederPage({
   }
 
   const handleSend = () => {
-    if ( !allDimensionsFilled()) return showTempError("Not Complete!")
+    if (!allDimensionsFilled()) return showTempError("Not Complete!")
     setShowError(false)
     setShowContactForm(true)
   }
@@ -148,52 +152,85 @@ export default function FeederPage({
     window.print()
   }
 
-  const handleSendEmail = async (formData: { name: string; email: string; phone: string; message: string }) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    setSelectedFiles((prev) => [...prev, ...files])
+  }
+
+  const handleFileDrop = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(false)
+    const files = Array.from(event.dataTransfer.files)
+    setSelectedFiles((prev) => [...prev, ...files])
+  }
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const removeFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
+
+  const handleSendEmail = async () => {
+    // Validate form - only name and email are required now
+    if (!contactForm.name || !contactForm.email) {
+      showTempError("Please fill in name and email fields")
+      return
+    }
+
     try {
       setIsSubmitting(true)
 
-      // Prepare data to send
+      // Prepare FormData for file upload
+      const formData = new FormData()
+      formData.append("name", contactForm.name)
+      formData.append("email", contactForm.email)
+      formData.append("phone", contactForm.phone || "Not provided")
+      formData.append("message", contactForm.message)
+      formData.append("feederType", feederType)
+      formData.append("title", title)
+
+      // Add the formatted feeder data
       const formattedData = formatDataForEmail(feederData, dimensionDescriptions, machineInfoFields)
+      formData.append("formData", formattedData)
 
-      // Create a simple data object with explicit property names that won't be affected by translation
-      const emailData = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone || "Not provided", // Use fallback if phone is empty
-        message: formData.message,
-        feederType,
-        title,
-        formData: formattedData,
-      }
-
-      // Log the data being sent (for debugging)
-      console.log("Sending email data:", emailData)
+      // Add files
+      selectedFiles.forEach((file) => {
+        formData.append("files", file)
+      })
 
       const response = await fetch("/api/send-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(emailData),
+        body: formData, // Use FormData instead of JSON
       })
 
       if (response.ok) {
-        // Show success message
-        showTempError("Email sent successfully!", true)
-      } else {
-        // Try to parse the error response
-        let errorMessage = "Unknown error"
-        try {
-          const errorData = await response.json()
-          errorMessage = errorData.error || errorMessage
-        } catch (e) {
-          // If we can't parse the response, use a generic error message
-        }
+        // Show success message without closing the form
+        showTempError("Email sent successfully! ✓", true)
 
-        console.error("Email sending failed:", errorMessage)
-        showTempError(`Failed to send email: ${errorMessage}. Please try again.`)
+        // Reset the form fields and files
+        setContactForm({ name: "", email: "", phone: "", message: "" })
+        setSelectedFiles([])
+      } else {
+        showTempError("Failed to send email")
       }
     } catch (error) {
-      console.error("Error sending email:", error)
-      showTempError("Error sending email. Please try again.")
+      showTempError("Error sending email")
     } finally {
       setIsSubmitting(false)
     }
@@ -227,7 +264,6 @@ export default function FeederPage({
   }
 
   const handleNext = () => {
-    
     if (!allDimensionsFilled()) {
       showTempError("Not Complete!")
       return
@@ -254,7 +290,6 @@ export default function FeederPage({
   }
 
   const handleOkClick = () => {
-    
     if (!allDimensionsFilled()) {
       showTempError("Not Complete!")
       return
@@ -429,48 +464,29 @@ export default function FeederPage({
     <>
       <NavigationMenu />
       <div className="bg-[#f2f4f4] min-h-screen w-[1050px] overflow-auto mx-auto p-4 print:p-0 light">
-            {/* Inactivity Popup */}
-            {showInactivityPopup && (
+        {/* Inactivity Popup */}
+        {showInactivityPopup && (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
-              
-              <div className="absolute animate-floatAround">
-                <Image
-                  src="/tnc-home-logo-nw.png"
-                  alt="TNC Logo"
-                  width={60}
-                  height={60}
-                  className="drop-shadow-lg"
-                />
-              </div>
+            <div className="absolute animate-floatAround">
+              <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
+            </div>
 
-                {/* Second Logo - New Counter-Rotation Animation */}
-              <div className="absolute animate-floatAroundReverse">
-                <Image
-                  src="/tnc-home-logo-nw.png"
-                  alt="TNC Logo"
-                  width={60}
-                  height={60}
-                  className="drop-shadow-lg"
-                />
-              </div>
+            {/* Second Logo - New Counter-Rotation Animation */}
+            <div className="absolute animate-floatAroundReverse">
+              <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
+            </div>
 
-              {/* Popup Container */}
-              <div className="relative bg-white p-8 rounded-lg shadow-xl text-center max-w-md z-10 animate-fadeIn mx-4">
-
+            {/* Popup Container */}
+            <div className="relative bg-white p-8 rounded-lg shadow-xl text-center max-w-md z-10 animate-fadeIn mx-4">
               <h2 className="text-2xl font-bold mb-4">We're here waiting for you to come back 😊</h2>
-              <p className="text-gray-600 mb-6">
-                Don't say goodbye to us... 
-              </p>
-              
+              <p className="text-gray-600 mb-6">Don't say goodbye to us...</p>
             </div>
           </div>
         )}
 
         <div ref={printRef} className="print-container flex flex-col h-[297mm] p-4 print:p-0 relative">
-            {/* Original title */}
-             <h1 className="text-2xl font-bold text-center mb-4">
-            {title}
-          </h1>
+          {/* Original title */}
+          <h1 className="text-2xl font-bold text-center mb-4">{title}</h1>
 
           {/* Machine Information */}
           <div className="border bg-white rounded-md p-3 mb-3">
@@ -509,9 +525,7 @@ export default function FeederPage({
                       id={field.id}
                       value={feederData.machineInfo[field.id] || ""}
                       onChange={(e) => updateMachineInfo(field.id, e.target.value)}
-                      className={`w-full border rounded-md px-3 py-2 ${
-                        !feederData.machineInfo[field.id] ? "" : ""
-                      }`}
+                      className={`w-full border rounded-md px-3 py-2 ${!feederData.machineInfo[field.id] ? "" : ""}`}
                     >
                       <option value="">Select</option>
                       {field.options?.map((option) => (
@@ -579,8 +593,6 @@ export default function FeederPage({
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Clear Data
               </button>
-
-              
             </div>
 
             <div className="absolute bottom-6 right-6 flex print:hidden">
@@ -728,15 +740,208 @@ export default function FeederPage({
           </div>
         )}
 
-        {/* Contact Form - Using vanilla DOM implementation */}
+        {/* Contact Form */}
         {showContactForm && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
-            <VanillaContactForm
-              onClose={() => setShowContactForm(false)}
-              onSave={handleSaveAsPDF}
-              onSubmit={handleSendEmail}
-              isSubmitting={isSubmitting}
-            />
+            <div className="bg-white rounded-lg p-6 shadow-md w-[500px] max-h-[90vh] overflow-y-auto relative">
+              {/* Add close button */}
+              <button
+                onClick={() => setShowContactForm(false)}
+                className="absolute top-2 right-2 text-gray-500 hover:text-black text-xl"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+
+              <h2 className="text-xl font-bold mb-4">Send Your Configuration</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Please provide your contact information to send the feeder configuration.
+              </p>
+
+              <div className="mb-4">
+                <label htmlFor="name" className="block text-sm font-medium mb-1">
+                  Company Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  placeholder="Your company name"
+                  className="border w-full p-2 rounded"
+                  value={contactForm.name}
+                  onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="email" className="block text-sm font-medium mb-1">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  placeholder="Your email"
+                  className="border w-full p-2 rounded"
+                  value={contactForm.email}
+                  onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="phone" className="block text-sm font-medium mb-1">
+                  Phone <span className="text-gray-500">(optional)</span>
+                </label>
+                <input
+                  type="tel"
+                  id="phone"
+                  placeholder="Your phone number"
+                  className="border w-full p-2 rounded"
+                  value={contactForm.phone}
+                  onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="message" className="block text-sm font-medium mb-1">
+                  Message <span className="text-gray-500">(optional)</span>
+                </label>
+                <textarea
+                  id="message"
+                  placeholder="Additional message"
+                  rows={3}
+                  className="border w-full p-2 rounded"
+                  value={contactForm.message}
+                  onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
+                />
+              </div>
+
+              {/* ATTACHMENT SECTION - Make sure this is visible */}
+              <div className="mb-4 border-t pt-4">
+                <label className="block text-sm font-medium mb-2">
+                  📎 Attachments <span className="text-gray-500">(optional)</span>
+                </label>
+
+                {/* File Upload Area */}
+                <div
+                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                    isDragOver ? "border-blue-400 bg-blue-50" : "border-gray-300 hover:border-gray-400"
+                  }`}
+                  onDrop={handleFileDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                >
+                  <input
+                    type="file"
+                    multiple
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="file-upload"
+                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.mp4"
+                  />
+                  <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center">
+                    <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                      />
+                    </svg>
+                    <span className="text-sm text-gray-600 font-medium">Click to upload files or drag and drop</span>
+                    <span className="text-xs text-gray-500 mt-1">PDF, DOC, TXT, Images (Max 10MB each)</span>
+                  </label>
+                </div>
+
+                {/* Selected Files List */}
+                {selectedFiles.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-sm font-medium text-gray-700">📁 Selected files ({selectedFiles.length}):</p>
+                    <div className="max-h-32 overflow-y-auto">
+                      {selectedFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded border">
+                          <div className="flex items-center space-x-2">
+                            <svg
+                              className="w-4 h-4 text-gray-500"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                              />
+                            </svg>
+                            <span className="text-sm text-gray-700 truncate max-w-xs">{file.name}</span>
+                            <span className="text-xs text-gray-500">({formatFileSize(file.size)})</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeFile(index)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                            aria-label="Remove file"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <button
+                  className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded flex items-center"
+                  onClick={handleSaveAsPDF}
+                >
+                  <Printer className="mr-2 h-4 w-4" />
+                  Save as PDF
+                </button>
+                <button
+                  className="bg-black text-white px-4 py-2 rounded flex items-center"
+                  onClick={handleSendEmail}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <svg
+                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      Sending...
+                    </>
+                  ) : (
+                    "Submit"
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

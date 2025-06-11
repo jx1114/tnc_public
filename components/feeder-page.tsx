@@ -932,10 +932,15 @@ export default function FeederPage({
                           <button
                             type="button"
                             onClick={() => removeFile(index)}
-                            className="absolute top-1 right-1 bg-white rounded-full p-1 shadow-sm hover:bg-red-100"
+                            className="text-red-500 hover:text-red-700"
                             aria-label="Remove file"
                           >
-                            <svg className="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
                               <path
                                 strokeLinecap="round"
                                 strokeLinejoin="round"

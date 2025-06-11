@@ -59,7 +59,7 @@ export default function FeederPage({
   const [showModelViewer, setShowModelViewer] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [showContactForm, setShowContactForm] = useState(false)
-  const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "", message: "" })
+  const [contactForm, setContactForm] = useState({ cname: "", name: "", email: "", phone: "", message: "" })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPasteModal, setShowPasteModal] = useState(false)
   const [pasteText, setPasteText] = useState("")
@@ -188,7 +188,7 @@ export default function FeederPage({
 
   const handleSendEmail = async () => {
     // Validate form - only name and email are required now
-    if (!contactForm.name || !contactForm.email) {
+    if (!contactForm.cname || !contactForm.name || !contactForm.email) {
       showTempError("Please fill in name and email fields")
       return
     }
@@ -198,6 +198,7 @@ export default function FeederPage({
 
       // Prepare FormData for file upload
       const formData = new FormData()
+      formData.append("cname", contactForm.cname)
       formData.append("name", contactForm.name)
       formData.append("email", contactForm.email)
       formData.append("phone", contactForm.phone || "Not provided")
@@ -221,10 +222,10 @@ export default function FeederPage({
 
       if (response.ok) {
         // Show success message without closing the form
-        showTempError("Email sent successfully! ✓", true)
+        showTempError("Email sent successfully!", true)
 
         // Reset the form fields and files
-        setContactForm({ name: "", email: "", phone: "", message: "" })
+        setContactForm({ cname: "", name: "", email: "", phone: "", message: "" })
         setSelectedFiles([])
       } else {
         showTempError("Failed to send email")
@@ -246,7 +247,7 @@ export default function FeederPage({
 
     // Machine Information
     result += "MACHINE INFORMATION\n"
-    result += "-----------------------------------\n"
+    result += "---------------------------------------------------------------\n"
     machineInfoFields.forEach((field) => {
       const value = data.machineInfo[field.id] || "Not specified"
       result += `${field.label}: ${value}\n`
@@ -254,7 +255,7 @@ export default function FeederPage({
 
     // Dimensions
     result += "\nDIMENSIONS\n"
-    result += "-----------------------------------\n"
+    result += "---------------------------------------------------------------\n"
     Object.entries(dimensionDescriptions).forEach(([key, description]) => {
       const value = data.dimensions[key] || "Not specified"
       result += `${key} ${value} mm\n`
@@ -764,8 +765,23 @@ export default function FeederPage({
                 </label>
                 <input
                   type="text"
-                  id="name"
+                  id="cname"
                   placeholder="Your company name"
+                  className="border w-full p-2 rounded"
+                  value={contactForm.cname}
+                  onChange={(e) => setContactForm({ ...contactForm, cname: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="name" className="block text-sm font-medium mb-1">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  placeholder="Your name"
                   className="border w-full p-2 rounded"
                   value={contactForm.name}
                   onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
@@ -816,74 +832,110 @@ export default function FeederPage({
                 />
               </div>
 
-              {/* ATTACHMENT SECTION - Make sure this is visible */}
+              {/* ATTACHMENT SECTION - Improved file upload UI */}
               <div className="mb-4 border-t pt-4">
-                <label className="block text-sm font-medium mb-2">
-                  📎 Attachments <span className="text-gray-500">(optional)</span>
-                </label>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium">
+                    📎 Attachments <span className="text-gray-500">(optional)</span>
+                  </label>
+                  <label
+                    htmlFor="file-upload"
+                    className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1 rounded text-sm flex items-center"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                      />
+                    </svg>
+                    Add File
+                  </label>
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || [])
+                      // Check if adding these files would exceed the limit
+                      if (selectedFiles.length + files.length > 5) {
+                        showTempError("Maximum 5 files allowed")
+                        return
+                      }
 
-                {/* File Upload Area */}
+                      // Check file sizes
+                      const oversizedFiles = files.filter((file) => file.size > 10 * 1024 * 1024)
+                      if (oversizedFiles.length > 0) {
+                        showTempError(
+                          `Some files exceed the 10MB limit: ${oversizedFiles.map((f) => f.name).join(", ")}`,
+                        )
+                        return
+                      }
+
+                      setSelectedFiles((prev) => [...prev, ...files])
+                    }}
+                    className="hidden"
+                    id="file-upload"
+                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.mp4,.mov"
+                  />
+                </div>
+
+                {/* File upload limit indicator */}
+                <div className="mb-2">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>{selectedFiles.length} of 5 files</span>
+                    <span>
+                      {(selectedFiles.reduce((acc, file) => acc + file.size, 0) / (1024 * 1024)).toFixed(2)} MB of 50 MB
+                      total
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full"
+                      style={{ width: `${Math.min(100, (selectedFiles.length / 5) * 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* File Upload Area with previews */}
                 <div
-                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-                    isDragOver ? "border-blue-400 bg-blue-50" : "border-gray-300 hover:border-gray-400"
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors ${
+                    isDragOver ? "border-blue-400 bg-blue-50" : "border-gray-300"
                   }`}
                   onDrop={handleFileDrop}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                 >
-                  <input
-                    type="file"
-                    multiple
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    id="file-upload"
-                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.mp4"
-                  />
-                  <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center">
-                    <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                      />
-                    </svg>
-                    <span className="text-sm text-gray-600 font-medium">Click to upload files or drag and drop</span>
-                    <span className="text-xs text-gray-500 mt-1">PDF, DOC, TXT, Images (Max 10MB each)</span>
-                  </label>
-                </div>
-
-                {/* Selected Files List */}
-                {selectedFiles.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    <p className="text-sm font-medium text-gray-700">📁 Selected files ({selectedFiles.length}):</p>
-                    <div className="max-h-32 overflow-y-auto">
+                  {selectedFiles.length === 0 ? (
+                    <div className="text-center py-8">
+                      <svg
+                        className="w-12 h-12 text-gray-400 mx-auto mb-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      <p className="text-sm text-gray-600 font-medium">Drag and drop files here</p>
+                      <p className="text-xs text-gray-500 mt-1">PDF, DOC, TXT, Images, Videos (Max 10MB each)</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {selectedFiles.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded border">
-                          <div className="flex items-center space-x-2">
-                            <svg
-                              className="w-4 h-4 text-gray-500"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                              />
-                            </svg>
-                            <span className="text-sm text-gray-700 truncate max-w-xs">{file.name}</span>
-                            <span className="text-xs text-gray-500">({formatFileSize(file.size)})</span>
-                          </div>
+                        <div key={index} className="relative border rounded-md p-2 bg-white">
+                          {/* Remove button */}
                           <button
                             type="button"
                             onClick={() => removeFile(index)}
-                            className="text-red-500 hover:text-red-700 p-1"
+                            className="absolute top-1 right-1 bg-white rounded-full p-1 shadow-sm hover:bg-red-100"
                             aria-label="Remove file"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
@@ -892,11 +944,67 @@ export default function FeederPage({
                               />
                             </svg>
                           </button>
+
+                          {/* File preview */}
+                          <div className="flex flex-col items-center">
+                            {file.type.startsWith("image/") ? (
+                              <div className="w-full h-20 relative mb-1">
+                                <img
+                                  src={URL.createObjectURL(file) || "/placeholder.svg"}
+                                  alt={file.name}
+                                  className="w-full h-full object-contain"
+                                  onLoad={() => URL.revokeObjectURL(URL.createObjectURL(file))}
+                                />
+                              </div>
+                            ) : file.type.startsWith("video/") ? (
+                              <div className="w-full h-20 relative mb-1 bg-gray-100 flex items-center justify-center">
+                                <svg
+                                  className="w-10 h-10 text-gray-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                                  />
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
+                                </svg>
+                              </div>
+                            ) : (
+                              <div className="w-full h-20 relative mb-1 bg-gray-100 flex items-center justify-center">
+                                <svg
+                                  className="w-10 h-10 text-gray-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                  />
+                                </svg>
+                              </div>
+                            )}
+                            <p className="text-xs text-gray-700 truncate w-full text-center">
+                              {file.name.length > 15 ? file.name.substring(0, 12) + "..." : file.name}
+                            </p>
+                            <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                          </div>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t">

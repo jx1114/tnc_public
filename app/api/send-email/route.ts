@@ -86,13 +86,14 @@ export async function POST(req: NextRequest) {
     // Check if the request contains multipart/form-data (for file uploads)
     const contentType = req.headers.get("content-type") || ""
 
-    let name: string, email: string, phone: string, message: string, feederType: string, title: string, formData: string
+    let cname: string, name: string, email: string, phone: string, message: string, feederType: string, title: string, formData: string
     const attachments: Array<{ filename: string; content: Buffer; contentType: string }> = []
 
     if (contentType.includes("multipart/form-data")) {
       // Handle FormData (with potential file uploads)
       const formDataRequest = await req.formData()
 
+      cname = formDataRequest.get("cname") as string
       name = formDataRequest.get("name") as string
       email = formDataRequest.get("email") as string
       phone = (formDataRequest.get("phone") as string) || ""
@@ -117,6 +118,7 @@ export async function POST(req: NextRequest) {
     } else {
       // Handle JSON data (backward compatibility)
       const jsonData = await req.json()
+      cname = jsonData.cname
       name = jsonData.name
       email = jsonData.email
       phone = jsonData.phone || ""
@@ -126,7 +128,7 @@ export async function POST(req: NextRequest) {
       formData = jsonData.formData || ""
     }
 
-    if (!name || !email) {
+    if (!cname || !email) {
       return NextResponse.json({ error: "Company name and email are required" }, { status: 400 })
     }
 
@@ -156,12 +158,13 @@ export async function POST(req: NextRequest) {
     const mailOptions = {
       from: process.env.EMAIL_USERNAME,
       to: process.env.RECIPIENT_EMAIL,
-      subject: `Feeder Configuration from ${name}`,
+      subject: `Feeder Configuration from ${cname}`,
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6;">
           <h2 style="color: #333;">Contact Information</h2>
           <hr style="border: 1px solid #eee; margin-bottom: 15px;">
-          <p><strong>Company Name:</strong> ${name}</p>
+          <p><strong>Company Name:</strong> ${cname}</p>
+          <p><strong>Name:</strong> ${name}</p>
           <p><strong>Email:</strong> ${email}</p>
           <p><strong>Phone:</strong> ${phone || "Not provided"}</p>
           <p><strong>IP Address:</strong> <span style="background-color: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: monospace;">${clientIP}</span></p>
@@ -190,7 +193,8 @@ export async function POST(req: NextRequest) {
       text: `
 Contact Information:
 -------------------
-Company Name: ${name}
+Company Name: ${cname}
+Name: ${name}
 Email: ${email}
 Phone: ${phone || "Not provided"}
 

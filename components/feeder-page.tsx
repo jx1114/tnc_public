@@ -78,6 +78,10 @@ export default function FeederPage({
   const [showInactivityPopup, setShowInactivityPopup] = useState(false)
   const inactivityTimer = useRef<NodeJS.Timeout | null>(null)
 
+  const [emptyMachineFields, setEmptyMachineFields] = useState<string[]>([])
+  const [showIncompleteMachineInfoModal, setShowIncompleteMachineInfoModal] = useState(false)
+
+
   function startInactivityTimer() {
     // Clear any existing timers first
     if (inactivityTimer.current) {
@@ -291,13 +295,28 @@ export default function FeederPage({
   }
 
   const handleOkClick = () => {
-    if (!allDimensionsFilled()) {
-      showTempError("Not Complete!")
+  // Check for empty required machine info fields
+
+  if (!allDimensionsFilled()) {
+      showTempError("Dimension is not complete!")
       return
     }
 
-    setShowSuccessModal(true)
+  const emptyFields = machineInfoFields
+    .filter(field => field.id !== "remark") // remark is optional
+    .filter(field => !feederData.machineInfo[field.id] || feederData.machineInfo[field.id].trim() === "")
+    .map(field => field.id)
+
+    setEmptyMachineFields(emptyFields)
+
+  if (emptyFields.length > 0) {
+    setShowIncompleteMachineInfoModal(true)
+    return
   }
+
+  // If all required fields are filled, proceed to success modal
+  setShowSuccessModal(true)
+}
 
   const showTempError = (message: string, isSuccess = false) => {
     setShowError(true)
@@ -466,24 +485,40 @@ export default function FeederPage({
       <NavigationMenu />
       <div className="bg-[#f2f4f4] min-h-screen w-[1050px] overflow-auto mx-auto p-4 print:p-0 light">
         {/* Inactivity Popup */}
-        {showInactivityPopup && (
-          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
-            <div className="absolute animate-floatAround">
-              <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
-            </div>
+{showInactivityPopup && (
+  <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
+    {/* Floating Logos */}
+    <div className="absolute animate-floatAround">
+      <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
+    </div>
+    <div className="absolute animate-floatAroundReverse">
+      <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
+    </div>
 
-            {/* Second Logo - New Counter-Rotation Animation */}
-            <div className="absolute animate-floatAroundReverse">
-              <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
-            </div>
-
-            {/* Popup Container */}
-            <div className="relative bg-white p-8 rounded-lg shadow-xl text-center max-w-md z-10 animate-fadeIn mx-4">
-              <h2 className="text-2xl font-bold mb-4">We're here waiting for you to come back 😊</h2>
-              <p className="text-gray-600 mb-6">Don't say goodbye to us...</p>
-            </div>
+    {/* Popup with Character */}
+    <div className="relative z-10 flex items-end mx-4">
+      {/* Character Image in Round Container */}
+      <div className="mr-4">
+         <div className="w-[60px] h-[60px] rounded-full overflow-hidden border border-white shadow-md flex items-center justify-center bg-white">
+            <img 
+              src="/tnc-home-logo.png" 
+              alt="TNC Logo" 
+              className="w-full h-full object-cover object-center" 
+            />
           </div>
-        )}
+      </div>
+
+      {/* Speech Bubble */}
+      <div className="relative bg-white p-4 rounded-2xl shadow-xl text-left max-w-md animate-fadeIn">
+        <h2 className="text-base font-semibold mb-1">We're here waiting for you to come back 😊</h2>
+        <p className="text-gray-500 text-sm">Don't say goodbye to us...</p>
+
+        {/* Triangle for speech bubble */}
+        <div className="absolute left-[-10px] top-6 w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-r-[10px] border-r-white"></div>
+      </div>
+    </div>
+  </div>
+)}
 
         <div ref={printRef} className="print-container flex flex-col h-[297mm] p-4 print:p-0 relative">
           {/* Original title */}
@@ -522,11 +557,13 @@ export default function FeederPage({
                       </div>
                     </div>
                   ) : field.type === "select" ? (
-                    <select
+                     <select
                       id={field.id}
                       value={feederData.machineInfo[field.id] || ""}
                       onChange={(e) => updateMachineInfo(field.id, e.target.value)}
-                      className={`w-full border rounded-md px-3 py-2 ${!feederData.machineInfo[field.id] ? "" : ""}`}
+                      className={`w-full border rounded-md px-3 py-2 ${
+                        emptyMachineFields.includes(field.id) ? 'border-red-700 animate-pulse' : ''
+                      }`}
                     >
                       <option value="">Select</option>
                       {field.options?.map((option) => (
@@ -542,7 +579,7 @@ export default function FeederPage({
                       value={feederData.machineInfo[field.id] || ""}
                       onChange={(e) => updateMachineInfo(field.id, e.target.value)}
                       className={`w-full border rounded-md px-3 py-2 ${
-                        field.id !== "remark" && !feederData.machineInfo[field.id] ? "" : ""
+                        emptyMachineFields.includes(field.id) ? 'border-red-700 animate-pulse' : ''
                       }`}
                     />
                   )}
@@ -1058,6 +1095,40 @@ export default function FeederPage({
           </div>
         )}
 
+        {showIncompleteMachineInfoModal && (
+  <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
+    <div className="bg-white rounded-lg p-6 shadow-lg w-[400px]">
+      <h2 className="text-xl font-bold mb-4">Incomplete Machine Information</h2>
+      <p className="mb-4">You haven't filled in all required machine information fields. Are you sure you want to proceed with blank fields?</p>
+      
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={() => {
+            setShowIncompleteMachineInfoModal(false)
+            // Focus on the first empty field
+            const firstEmptyField = document.getElementById(emptyMachineFields[0])
+            if (firstEmptyField) {
+              firstEmptyField.focus()
+            }
+          }}
+          className="px-4 py-2 border rounded-md hover:bg-gray-100"
+        >
+          No, I'll fill them
+        </button>
+        <button
+          onClick={() => {
+            setShowIncompleteMachineInfoModal(false)
+            setShowSuccessModal(true)
+          }}
+          className="px-4 py-2 bg-black text-white rounded-md"
+        >
+          Yes, proceed
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
         {/* Paste Data Modal */}
         {showPasteModal && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
@@ -1243,6 +1314,17 @@ export default function FeederPage({
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 
+ @keyframes pulse {
+    0%, 100% {
+      border-color:rgb(230, 36, 36);
+    }
+    50% {
+      border-color:rgb(252, 252, 252);
+    }
+  }
+  .animate-pulse {
+    animation: pulse 1s infinite;
+  }
       `}</style>
     </>
   )

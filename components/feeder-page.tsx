@@ -1,13 +1,16 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useRef, useEffect } from "react"
 import Image from "next/image"
 import { useRouter, usePathname } from "next/navigation"
 import { useFormContext } from "@/context/FormContext"
 import NavigationMenu from "./navigation-menu"
 import ModelViewer from "./model-viewer"
-import { RefreshCw, Send, Clipboard, Check } from "lucide-react"
-import VanillaContactForm from "./vanilla-contact-form"
+import { Printer, RefreshCw, Send, Check } from "lucide-react"
+import { Howl } from 'howler';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export type FeederPageProps = {
   title: string
@@ -58,6 +61,7 @@ export default function FeederPage({
   const [showModelViewer, setShowModelViewer] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [showContactForm, setShowContactForm] = useState(false)
+  const [contactForm, setContactForm] = useState({ cname: "", name: "", email: "", phone: "", message: "" })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPasteModal, setShowPasteModal] = useState(false)
   const [pasteText, setPasteText] = useState("")
@@ -66,6 +70,8 @@ export default function FeederPage({
     dimensions: Record<string, string>
   } | null>(null)
   const [showParsePreview, setShowParsePreview] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [isDragOver, setIsDragOver] = useState(false)
 
   const printRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -73,6 +79,21 @@ export default function FeederPage({
 
   const [showInactivityPopup, setShowInactivityPopup] = useState(false)
   const inactivityTimer = useRef<NodeJS.Timeout | null>(null)
+  const [showSuccessPoster, setShowSuccessPoster] = useState(false);
+  const [emptyMachineFields, setEmptyMachineFields] = useState<string[]>([])
+  const [showCharacter, setShowCharacter] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const soundRef = useRef<Howl | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Add this effect for audio cleanup
+useEffect(() => {
+  return () => {
+    if (soundRef.current) {
+      soundRef.current.unload();
+    }
+  };
+}, []);
 
   function startInactivityTimer() {
     // Clear any existing timers first
@@ -80,8 +101,8 @@ export default function FeederPage({
       clearTimeout(inactivityTimer.current)
     }
 
-     // Set new inactivity timer (30 seconds)
-     inactivityTimer.current = setTimeout(() => {
+    // Set new inactivity timer (30 seconds)
+    inactivityTimer.current = setTimeout(() => {
       setShowInactivityPopup(true)
     }, 30000) // 30 seconds of inactivity
   }
@@ -91,7 +112,7 @@ export default function FeederPage({
     if (showInactivityPopup) {
       setShowInactivityPopup(false)
     }
-    
+
     // Restart the timer
     startInactivityTimer()
   }
@@ -133,14 +154,106 @@ export default function FeederPage({
     })
   }
 
+  // Add this function to play error sounds
+const playErrorSound = (message: string) => {
+  setShowCharacter(true);
+  setIsSpeaking(true);
+  setErrorMessage(message); // Set the error message to show in bubble
+  
+  // Determine which audio file to play based on message
+  let audioFile = '/dimension-not-complete.mp3';
+  if (message.includes("A")) {
+    audioFile = '/sounds/dimensionA.mp3';
+  } 
+  if (message.includes("B")) {
+    audioFile = '/sounds/dimensionB.mp3';
+  } 
+  if (message.includes("C")) {
+    audioFile = '/sounds/dimensionC.mp3';
+  } 
+  if (message.includes("Dimension D")) {
+    audioFile = '/sounds/dimensionD.mp3';
+  } 
+  if (message.includes("E")) {
+    audioFile = '/sounds/dimensionE.mp3';
+  } 
+  if (message.includes("F")) {
+    audioFile = '/sounds/dimensionF.mp3';
+  } 
+  if (message.includes("G")) {
+    audioFile = '/sounds/dimensionG.mp3';
+  } 
+  if (message.includes("H")) {
+    audioFile = '/sounds/dimensionH.mp3';
+  } 
+  if (message.includes("I")) {
+    audioFile = '/sounds/dimensionI.mp3';
+  } 
+  if (message.includes("J")) {
+    audioFile = '/sounds/dimensionJ.mp3';
+  } 
+  if (message.includes("K")) {
+    audioFile = '/sounds/dimensionK.mp3';
+  } 
+  if (message.includes("L")) {
+    audioFile = '/sounds/dimensionL.mp3';
+  } 
+  if (message.includes("M")) {
+    audioFile = '/sounds/dimensionM.mp3';
+  } 
+  if (message.includes("N")) {
+    audioFile = '/sounds/dimensionN.mp3';
+  } 
+  if (message.includes("O")) {
+    audioFile = '/sounds/dimensionO.mp3';
+  } 
+  if (message.includes("P")) {
+    audioFile = '/sounds/dimensionP.mp3';
+  } 
+  if (message.includes("Part")) {
+    audioFile = '/sounds/partName.mp3';
+  } 
+  if (message.includes("Rotation")) {
+    audioFile = '/sounds/rotation.mp3';
+  } 
+  if (message.includes("UPH")) {
+    audioFile = '/sounds/UPH.mp3';
+  } 
+  if (message.includes("Linear")) {
+    audioFile = '/sounds/linear.mp3';
+  } 
+  if (message.includes("Hopper")) {
+    audioFile = '/sounds/hopper.mp3';
+  } 
+   if (message.includes("cleared")) {
+    audioFile = '/sounds/dataCleared.mp3';
+  } 
+
+
+
+  soundRef.current = new Howl({
+    src: [audioFile],
+    html5: true,
+    onplay: () => {
+      if (videoRef.current) {
+        videoRef.current.play();
+      }
+    },
+    onend: () => {
+      setIsSpeaking(false);
+      
+    }
+  });
+  
+  soundRef.current.play();
+};
+
   const handleDimensionClick = (dimension: string) => {
     setCurrentDimension(dimension)
     setDimensionValue(feederData.dimensions[dimension] || "")
   }
 
   const handleSend = () => {
-    if ( !allDimensionsFilled()) return showTempError("Not Complete!")
-    setShowError(false)
     setShowContactForm(true)
   }
 
@@ -148,52 +261,100 @@ export default function FeederPage({
     window.print()
   }
 
-  const handleSendEmail = async (formData: { name: string; email: string; phone: string; message: string }) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    setSelectedFiles((prev) => [...prev, ...files])
+  }
+
+  const handleFileDrop = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(false)
+    const files = Array.from(event.dataTransfer.files)
+    setSelectedFiles((prev) => [...prev, ...files])
+  }
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const removeFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
+
+  const handleSendEmail = async () => {
+    // Validate form - only name and email are required now
+    if (!contactForm.cname) {
+      showTempError("Please fill in your company name")
+      return
+    }
+     if (!contactForm.name) {
+      showTempError("Please fill in your name")
+      return
+    }
+     if (!contactForm.email) {
+      showTempError("Please fill in your email")
+      return
+    }
+
     try {
       setIsSubmitting(true)
 
-      // Prepare data to send
+      // Prepare FormData for file upload
+      const formData = new FormData()
+      formData.append("cname", contactForm.cname)
+      formData.append("name", contactForm.name)
+      formData.append("email", contactForm.email)
+      formData.append("phone", contactForm.phone || "Not provided")
+      formData.append("message", contactForm.message)
+      formData.append("feederType", feederType)
+      formData.append("title", title)
+
+      // Add the formatted feeder data
       const formattedData = formatDataForEmail(feederData, dimensionDescriptions, machineInfoFields)
+      formData.append("formData", formattedData)
 
-      // Create a simple data object with explicit property names that won't be affected by translation
-      const emailData = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone || "Not provided", // Use fallback if phone is empty
-        message: formData.message,
-        feederType,
-        title,
-        formData: formattedData,
-      }
-
-      // Log the data being sent (for debugging)
-      console.log("Sending email data:", emailData)
+      // Add files
+      selectedFiles.forEach((file) => {
+        formData.append("files", file)
+      })
 
       const response = await fetch("/api/send-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(emailData),
+        body: formData, // Use FormData instead of JSON
       })
 
       if (response.ok) {
-        // Show success message
-        showTempError("Email sent successfully!", true)
-      } else {
-        // Try to parse the error response
-        let errorMessage = "Unknown error"
-        try {
-          const errorData = await response.json()
-          errorMessage = errorData.error || errorMessage
-        } catch (e) {
-          // If we can't parse the response, use a generic error message
-        }
+        // Show success poster
+        setShowSuccessPoster(true);
 
-        console.error("Email sending failed:", errorMessage)
-        showTempError(`Failed to send email: ${errorMessage}. Please try again.`)
+        // Hide after 3 seconds
+        setTimeout(() => setShowSuccessPoster(false), 3000);
+
+        // Show success message without closing the form
+        showTempError("Email sent successfully!")
+
+        // Reset the form fields and files
+        setContactForm({ cname: "", name: "", email: "", phone: "", message: "" })
+        setSelectedFiles([])
+      } else {
+        showTempError("Failed to send email")
       }
     } catch (error) {
-      console.error("Error sending email:", error)
-      showTempError("Error sending email. Please try again.")
+      showTempError("Error sending email")
     } finally {
       setIsSubmitting(false)
     }
@@ -209,7 +370,7 @@ export default function FeederPage({
 
     // Machine Information
     result += "MACHINE INFORMATION\n"
-    result += "-----------------------------------\n"
+    result += "---------------------------------------------------------------\n"
     machineInfoFields.forEach((field) => {
       const value = data.machineInfo[field.id] || "Not specified"
       result += `${field.label}: ${value}\n`
@@ -217,7 +378,7 @@ export default function FeederPage({
 
     // Dimensions
     result += "\nDIMENSIONS\n"
-    result += "-----------------------------------\n"
+    result += "---------------------------------------------------------------\n"
     Object.entries(dimensionDescriptions).forEach(([key, description]) => {
       const value = data.dimensions[key] || "Not specified"
       result += `${key} ${value} mm\n`
@@ -227,7 +388,6 @@ export default function FeederPage({
   }
 
   const handleNext = () => {
-    
     if (!allDimensionsFilled()) {
       showTempError("Not Complete!")
       return
@@ -250,24 +410,121 @@ export default function FeederPage({
 
   const handleClearData = () => {
     clearCurrentPageData()
-    showTempError("Data cleared successfully!", true)
+    playErrorSound("Data cleared successfully!")
   }
 
-  const handleOkClick = () => {
+  const dimensionErrorMessages: Record<string, string> = {
+  A: "Dimension A is missing!",
+  B: "Dimension B is missing!",
+  C: "Dimension C is missing!",
+  D: "Dimension D is missing!",
+  E: "Dimension E is missing!",
+  F: "Dimension F is missing!",
+  G: "Dimension G is missing!",
+  H: "Dimension H is missing!",
+  I: "Dimension I is missing!",
+  J: "Dimension J is missing!",
+  K: "Dimension K is missing!",
+  L: "Dimension L is missing!",
+  M: "Dimension M is missing!",
+  N: "Dimension N is missing!",
+  O: "Dimension O is missing!",
+  P: "Dimension P is missing!",
+};
+
+ // Update your handleOkClick function
+const handleOkClick = () => {
+  // First check dimensions
+  if (!allDimensionsFilled()) {
+  const firstEmptyDimension = Object.keys(dimensionDescriptions).find(
+    key => !feederData.dimensions[key]
+  );
+
+  if (firstEmptyDimension) {
+    const errorMessage = dimensionErrorMessages[firstEmptyDimension] || "Dimension is not complete!";
+    playErrorSound(errorMessage);
+
+    // Simulate click on the dimension button
+    const dimensionButton = document.querySelector(
+      `button[style*="left: ${dimensionPositions[firstEmptyDimension].x}%"]`
+    ) as HTMLElement;
+    dimensionButton?.click();
+  }
+
+  return;
+}
+
+  // Then check machine info
+  const emptyFields = machineInfoFields
+    .filter(field => field.id !== "remark")
+    .filter(field => !feederData.machineInfo[field.id] || feederData.machineInfo[field.id].trim() === "");
+
+  setEmptyMachineFields(emptyFields.map(f => f.id));
+
+  if (emptyFields.length > 0) {
+    const firstEmptyField = emptyFields[0];
+    playErrorSound(`${firstEmptyField.label} is missing!`);
     
-    if (!allDimensionsFilled()) {
-      showTempError("Not Complete!")
-      return
+    // Focus on the first empty field
+    const inputElement = document.getElementById(firstEmptyField.id);
+    if (inputElement) {
+      inputElement.focus();
+      
+      // Scroll to the field if needed
+      inputElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
     }
-
-    setShowSuccessModal(true)
+    
+    return;
   }
 
-  const showTempError = (message: string, isSuccess = false) => {
-    setShowError(true)
-    setErrorMessage(message)
-    setTimeout(() => setShowError(false), isSuccess ? 4000 : 5000)
-  }
+  // If all validations pass
+  setShowSuccessModal(true);
+};
+
+  const showTempError = (message: string) => {
+  setShowCharacter(true);
+  setIsSpeaking(true);
+  setErrorMessage(message); // Set the error message to show in bubble
+  
+  let audioFile = '/dimension-not-complete.mp3';
+  if (message.includes("sent")) {
+    audioFile = '/sounds/emailSent.mp3';
+  } 
+  if (message.includes("company")) {
+    audioFile = '/sounds/companyName.mp3';
+  } 
+   if (message.includes("your name")) {
+    audioFile = '/sounds/name.mp3';
+  } 
+   if (message.includes("your email")) {
+    audioFile = '/sounds/email.mp3';
+  } 
+  if (message.includes("maximum")) {
+    audioFile = '/sounds/maxNumber.mp3';
+  } 
+  if (message.includes("10MB")) {
+    audioFile = '/sounds/10MB.mp3';
+  } 
+  
+  soundRef.current = new Howl({
+    src: [audioFile],
+    html5: true,
+    onplay: () => {
+      if (videoRef.current) {
+        videoRef.current.play();
+      }
+    },
+    onend: () => {
+      setIsSpeaking(false);
+    }
+  });
+  
+  soundRef.current.play();
+
+};
 
   const getCurrentDate = () => {
     const now = new Date()
@@ -403,7 +660,7 @@ export default function FeederPage({
 
       setShowPasteModal(false)
       setPasteText("")
-      showTempError("Data imported successfully!", true)
+      showTempError("Data imported successfully!")
     } else {
       // Update the form data with the already parsed values
       const updatedData = {
@@ -417,7 +674,7 @@ export default function FeederPage({
       setShowPasteModal(false)
       setPasteText("")
       setParsedData(null)
-      showTempError("Data imported successfully!", true)
+      showTempError("Data imported successfully!")
     }
   }
 
@@ -429,48 +686,45 @@ export default function FeederPage({
     <>
       <NavigationMenu />
       <div className="bg-[#f2f4f4] min-h-screen w-[1050px] overflow-auto mx-auto p-4 print:p-0 light">
-            {/* Inactivity Popup */}
-            {showInactivityPopup && (
-          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
-              
-              <div className="absolute animate-floatAround">
-                <Image
-                  src="/tnc-home-logo-nw.png"
-                  alt="TNC Logo"
-                  width={60}
-                  height={60}
-                  className="drop-shadow-lg"
-                />
-              </div>
+        {/* Inactivity Popup */}
+{showInactivityPopup && (
+  <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
+    {/* Floating Logos */}
+    <div className="absolute animate-floatAround">
+      <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
+    </div>
+    <div className="absolute animate-floatAroundReverse">
+      <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
+    </div>
 
-                {/* Second Logo - New Counter-Rotation Animation */}
-              <div className="absolute animate-floatAroundReverse">
-                <Image
-                  src="/tnc-home-logo-nw.png"
-                  alt="TNC Logo"
-                  width={60}
-                  height={60}
-                  className="drop-shadow-lg"
-                />
-              </div>
-
-              {/* Popup Container */}
-              <div className="relative bg-white p-8 rounded-lg shadow-xl text-center max-w-md z-10 animate-fadeIn mx-4">
-
-              <h2 className="text-2xl font-bold mb-4">We're here waiting for you to come back 😊</h2>
-              <p className="text-gray-600 mb-6">
-                Don't say goodbye to us... 
-              </p>
-              
-            </div>
+    {/* Popup with Character */}
+    <div className="relative z-10 flex items-end mx-4">
+      {/* Character Image in Round Container */}
+      <div className="mr-4">
+         <div className="w-[60px] h-[60px] rounded-full overflow-hidden border border-white shadow-md flex items-center justify-center bg-white">
+            <img 
+              src="/tnc-home-logo.png" 
+              alt="TNC Logo" 
+              className="w-full h-full object-cover object-center" 
+            />
           </div>
-        )}
+      </div>
+
+      {/* Speech Bubble */}
+      <div className="relative bg-white p-4 rounded-2xl shadow-xl text-left max-w-md animate-fadeIn">
+        <h2 className="text-base font-semibold mb-1">We're here waiting for you to come back 😊</h2>
+        <p className="text-gray-500 text-sm">Don't say goodbye to us...</p>
+
+        {/* Triangle for speech bubble */}
+        <div className="absolute left-[-10px] top-6 w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-r-[10px] border-r-white"></div>
+      </div>
+    </div>
+  </div>
+)}
 
         <div ref={printRef} className="print-container flex flex-col h-[297mm] p-4 print:p-0 relative">
-            {/* Original title */}
-             <h1 className="text-2xl font-bold text-center mb-4">
-            {title}
-          </h1>
+          {/* Original title */}
+          <h1 className="text-2xl font-bold text-center mb-4">{title}</h1>
 
           {/* Machine Information */}
           <div className="border bg-white rounded-md p-3 mb-3">
@@ -505,12 +759,12 @@ export default function FeederPage({
                       </div>
                     </div>
                   ) : field.type === "select" ? (
-                    <select
+                     <select
                       id={field.id}
                       value={feederData.machineInfo[field.id] || ""}
                       onChange={(e) => updateMachineInfo(field.id, e.target.value)}
                       className={`w-full border rounded-md px-3 py-2 ${
-                        !feederData.machineInfo[field.id] ? "" : ""
+                        emptyMachineFields.includes(field.id) ? 'border-red-700 animate-pulse' : ''
                       }`}
                     >
                       <option value="">Select</option>
@@ -527,7 +781,7 @@ export default function FeederPage({
                       value={feederData.machineInfo[field.id] || ""}
                       onChange={(e) => updateMachineInfo(field.id, e.target.value)}
                       className={`w-full border rounded-md px-3 py-2 ${
-                        field.id !== "remark" && !feederData.machineInfo[field.id] ? "" : ""
+                        emptyMachineFields.includes(field.id) ? 'border-red-700 animate-pulse' : ''
                       }`}
                     />
                   )}
@@ -579,8 +833,6 @@ export default function FeederPage({
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Clear Data
               </button>
-
-              
             </div>
 
             <div className="absolute bottom-6 right-6 flex print:hidden">
@@ -642,21 +894,6 @@ export default function FeederPage({
                   Close
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Error/Success Toast */}
-        {showError && (
-          <div className={`fixed inset-0 flex items-center justify-center z-[100] pointer-events-none print:hidden`}>
-            <div
-              className={`${
-                errorMessage.includes("successfully")
-                  ? "bg-green-100 border-2 border-green-500 text-green-700"
-                  : "bg-red-100 border-2 border-red-500 text-red-700"
-              } rounded-md shadow-lg p-4 max-w-xs text-center font-medium`}
-            >
-              {errorMessage}
             </div>
           </div>
         )}
@@ -728,18 +965,402 @@ export default function FeederPage({
           </div>
         )}
 
-        {/* Contact Form - Using vanilla DOM implementation */}
+        {/* Contact Form */}
         {showContactForm && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
-            <VanillaContactForm
-              onClose={() => setShowContactForm(false)}
-              onSave={handleSaveAsPDF}
-              onSubmit={handleSendEmail}
-              isSubmitting={isSubmitting}
-            />
+            <div className="bg-white rounded-lg p-6 shadow-md w-[500px] max-h-[90vh] overflow-y-auto relative">
+              {/* Add close button */}
+              <button
+                onClick={() => setShowContactForm(false)}
+                className="absolute top-2 right-2 text-gray-500 hover:text-black text-xl"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+
+              <h2 className="text-xl font-bold mb-4">Send Your Configuration</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Please provide your contact information to send the feeder configuration.
+              </p>
+
+              <div className="mb-4">
+                <label htmlFor="name" className="block text-sm font-medium mb-1">
+                  Company Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="cname"
+                  placeholder="Your company name"
+                  className="border w-full p-2 rounded"
+                  value={contactForm.cname}
+                  onChange={(e) => setContactForm({ ...contactForm, cname: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="name" className="block text-sm font-medium mb-1">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  placeholder="Your name"
+                  className="border w-full p-2 rounded"
+                  value={contactForm.name}
+                  onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="email" className="block text-sm font-medium mb-1">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  placeholder="Your email"
+                  className="border w-full p-2 rounded"
+                  value={contactForm.email}
+                  onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="phone" className="block text-sm font-medium mb-1">
+                  Phone <span className="text-gray-500">(optional)</span>
+                </label>
+                <input
+                  type="tel"
+                  id="phone"
+                  placeholder="Your phone number"
+                  className="border w-full p-2 rounded"
+                  value={contactForm.phone}
+                  onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="message" className="block text-sm font-medium mb-1">
+                  Message <span className="text-gray-500">(optional)</span>
+                </label>
+                <textarea
+                  id="message"
+                  placeholder="Additional message"
+                  rows={3}
+                  className="border w-full p-2 rounded"
+                  value={contactForm.message}
+                  onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
+                />
+              </div>
+
+              {/* ATTACHMENT SECTION - Improved file upload UI */}
+              <div className="mb-4 border-t pt-4">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium">
+                    📎 Attachments <span className="text-gray-500">(optional)</span>
+                  </label>
+                  <label
+                    htmlFor="file-upload"
+                    className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1 rounded text-sm flex items-center"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                      />
+                    </svg>
+                    Add File
+                  </label>
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || [])
+                      // Check if adding these files would exceed the limit
+                      if (selectedFiles.length + files.length > 5) {
+                        showTempError("Maximum 5 files allowed")
+                        return
+                      }
+
+                      // Check file sizes
+                      const oversizedFiles = files.filter((file) => file.size > 10 * 1024 * 1024)
+                      if (oversizedFiles.length > 0) {
+                        showTempError(
+                          `Some files exceed the 10MB limit: ${oversizedFiles.map((f) => f.name).join(", ")}`,
+                        )
+                        return
+                      }
+
+                      setSelectedFiles((prev) => [...prev, ...files])
+                    }}
+                    className="hidden"
+                    id="file-upload"
+                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.mp4,.mov"
+                  />
+                </div>
+
+                {/* File upload limit indicator */}
+                <div className="mb-2">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>{selectedFiles.length} of 5 files</span>
+                    <span>
+                      {(selectedFiles.reduce((acc, file) => acc + file.size, 0) / (1024 * 1024)).toFixed(2)} MB of 50 MB
+                      total
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full"
+                      style={{ width: `${Math.min(100, (selectedFiles.length / 5) * 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* File Upload Area with previews */}
+                <div
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors ${
+                    isDragOver ? "border-blue-400 bg-blue-50" : "border-gray-300"
+                  }`}
+                  onDrop={handleFileDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                >
+                  {selectedFiles.length === 0 ? (
+                    <div className="text-center py-8">
+                      <svg
+                        className="w-12 h-12 text-gray-400 mx-auto mb-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      <p className="text-sm text-gray-600 font-medium">Drag and drop files here</p>
+                      <p className="text-xs text-gray-500 mt-1">PDF, DOC, TXT, Images, Videos (Max 10MB each)</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {selectedFiles.map((file, index) => (
+                        <div key={index} className="relative border rounded-md p-2 bg-white">
+                          {/* Remove button */}
+                          <button
+                            type="button"
+                            onClick={() => removeFile(index)}
+                            className="text-red-500 hover:text-red-700"
+                            aria-label="Remove file"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+
+                          {/* File preview */}
+                          <div className="flex flex-col items-center">
+                            {file.type.startsWith("image/") ? (
+                              <div className="w-full h-20 relative mb-1">
+                                <img
+                                  src={URL.createObjectURL(file) || "/placeholder.svg"}
+                                  alt={file.name}
+                                  className="w-full h-full object-contain"
+                                  onLoad={() => URL.revokeObjectURL(URL.createObjectURL(file))}
+                                />
+                              </div>
+                            ) : file.type.startsWith("video/") ? (
+                              <div className="w-full h-20 relative mb-1 bg-gray-100 flex items-center justify-center">
+                                <svg
+                                  className="w-10 h-10 text-gray-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                                  />
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
+                                </svg>
+                              </div>
+                            ) : (
+                              <div className="w-full h-20 relative mb-1 bg-gray-100 flex items-center justify-center">
+                                <svg
+                                  className="w-10 h-10 text-gray-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                  />
+                                </svg>
+                              </div>
+                            )}
+                            <p className="text-xs text-gray-700 truncate w-full text-center">
+                              {file.name.length > 15 ? file.name.substring(0, 12) + "..." : file.name}
+                            </p>
+                            <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <button
+                  className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded flex items-center"
+                  onClick={handleSaveAsPDF}
+                >
+                  <Printer className="mr-2 h-4 w-4" />
+                  Save as PDF
+                </button>
+                <button
+                  className="bg-black text-white px-4 py-2 rounded flex items-center"
+                  onClick={handleSendEmail}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <svg
+                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      Sending...
+                    </>
+                  ) : (
+                    "Submit"
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
+      <motion.div 
+  className="fixed bottom-6 right-6 z-50"
+  whileHover={{ scale: 1.05 }}
+>
+  <motion.div
+    className="relative w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg bg-white"
+    animate={{ 
+      scale: isSpeaking ? 1.15 : 1,
+      rotate: isSpeaking ? [0, -5, 5, -5, 0] : 0 
+    }}
+    transition={{ 
+      type: 'spring', 
+      stiffness: 500, 
+      damping: 20,
+      rotate: { duration: 0.5 }
+    }}
+  >
+    <video
+      ref={videoRef}
+      autoPlay
+      loop
+      muted
+      playsInline
+      className="absolute inset-0 w-full h-full object-cover"
+    >
+      <source src="/bot.webm" type="video/webm" />
+    </video>
+  </motion.div>
+
+  {/* Speech bubble outside of video container */}
+  <AnimatePresence>
+    {isSpeaking && (
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.8 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.8 }}
+        transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+        className="absolute -top-24 right-1/2 transform translate-x-12 bg-white px-4 py-3 rounded-2xl shadow-lg max-w-xs"
+        style={{
+          filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))'
+        }}
+      >
+        <p className="text-sm font-medium">
+          {errorMessage}
+        </p>
+
+        {/* Speech bubble tail */}
+        <div className="absolute -bottom-2 right-4 transform -translate-x-1/2 w-4 h-4 bg-white rotate-45 shadow-md"></div>
+
+        {/* Speaking indicator */}
+        <div className="absolute -bottom-6 right-4 transform -translate-x-1/2 flex space-x-1">
+          {[1, 2, 3].map((i) => (
+            <motion.div
+              key={i}
+              animate={{ 
+                height: [4, 8, 4],
+                opacity: [0.6, 1, 0.6]
+              }}
+              transition={{ 
+                repeat: Infinity,
+                duration: 0.8,
+                delay: i * 0.2
+              }}
+              className="w-1 bg-blue-500 rounded-full"
+              style={{ height: 4 }}
+            />
+          ))}
+        </div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+</motion.div>
+
+{showSuccessPoster && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <img src="/thank-you.jpeg" alt="Success" className="h-[90vh] w-auto mx-auto mb-4 shadow-xl" />
+  </div>
+)}
+      
         {/* Paste Data Modal */}
         {showPasteModal && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
@@ -925,6 +1546,17 @@ export default function FeederPage({
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 
+ @keyframes pulse {
+    0%, 100% {
+      border-color:rgb(230, 36, 36);
+    }
+    50% {
+      border-color:rgb(252, 252, 252);
+    }
+  }
+  .animate-pulse {
+    animation: pulse 1s infinite;
+  }
       `}</style>
     </>
   )

@@ -33,7 +33,7 @@ export default function setBPage() {
       dimensionDescriptions={setBDimensionDescriptions}
       dimensionPositions={setBDimensionPositions}
       machineInfoFields={[
-        { id: "partName", label: "Part Name", type: "text" },
+        { id: "partName", label: "Part Name / Project No.", type: "text" },
         {
           id: "rotation",
           label: "Rotation",

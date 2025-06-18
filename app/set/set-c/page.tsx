@@ -49,7 +49,7 @@ export default function setCPage() {
       dimensionDescriptions={setCDimensionDescriptions}
       dimensionPositions={setCDimensionPositions}
       machineInfoFields={[
-        { id: "partName", label: "Part Name", type: "text" },
+        { id: "partName", label: "Part Name / Project No.", type: "text" },
         {
           id: "rotation",
           label: "Rotation",

@@ -33,7 +33,7 @@ export default function BowlFeederPage() {
       dimensionPositions={bowlFeederDimensionPositions}
       
       machineInfoFields={[
-        { id: "partName", label: "Part Name", type: "text" },
+        { id: "partName", label: "Part Name / Project No.", type: "text" },
         {
           id: "rotation",
           label: "Rotation",

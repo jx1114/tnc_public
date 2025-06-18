@@ -9,6 +9,8 @@ import { useFormContext } from "@/context/FormContext"
 import NavigationMenu from "./navigation-menu"
 import ModelViewer from "./model-viewer"
 import { Printer, RefreshCw, Send, Check } from "lucide-react"
+import { Howl } from 'howler';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export type FeederPageProps = {
   title: string
@@ -77,6 +79,20 @@ export default function FeederPage({
 
   const [showInactivityPopup, setShowInactivityPopup] = useState(false)
   const inactivityTimer = useRef<NodeJS.Timeout | null>(null)
+  const [showSuccessPoster, setShowSuccessPoster] = useState(false);
+  const [showCharacter, setShowCharacter] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const soundRef = useRef<Howl | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Add this effect for audio cleanup
+useEffect(() => {
+  return () => {
+    if (soundRef.current) {
+      soundRef.current.unload();
+    }
+  };
+}, []);
 
   const [emptyMachineFields, setEmptyMachineFields] = useState<string[]>([])
   const [showIncompleteMachineInfoModal, setShowIncompleteMachineInfoModal] = useState(false)
@@ -141,14 +157,106 @@ export default function FeederPage({
     })
   }
 
+  // Add this function to play error sounds
+const playErrorSound = (message: string) => {
+  setShowCharacter(true);
+  setIsSpeaking(true);
+  setErrorMessage(message); // Set the error message to show in bubble
+  
+  // Determine which audio file to play based on message
+  let audioFile = '/dimension-not-complete.mp3';
+  if (message.includes("A")) {
+    audioFile = '/sounds/dimensionA.mp3';
+  } 
+  if (message.includes("B")) {
+    audioFile = '/sounds/dimensionB.mp3';
+  } 
+  if (message.includes("C")) {
+    audioFile = '/sounds/dimensionC.mp3';
+  } 
+  if (message.includes("Dimension D")) {
+    audioFile = '/sounds/dimensionD.mp3';
+  } 
+  if (message.includes("E")) {
+    audioFile = '/sounds/dimensionE.mp3';
+  } 
+  if (message.includes("F")) {
+    audioFile = '/sounds/dimensionF.mp3';
+  } 
+  if (message.includes("G")) {
+    audioFile = '/sounds/dimensionG.mp3';
+  } 
+  if (message.includes("H")) {
+    audioFile = '/sounds/dimensionH.mp3';
+  } 
+  if (message.includes("I")) {
+    audioFile = '/sounds/dimensionI.mp3';
+  } 
+  if (message.includes("J")) {
+    audioFile = '/sounds/dimensionJ.mp3';
+  } 
+  if (message.includes("K")) {
+    audioFile = '/sounds/dimensionK.mp3';
+  } 
+  if (message.includes("L")) {
+    audioFile = '/sounds/dimensionL.mp3';
+  } 
+  if (message.includes("M")) {
+    audioFile = '/sounds/dimensionM.mp3';
+  } 
+  if (message.includes("N")) {
+    audioFile = '/sounds/dimensionN.mp3';
+  } 
+  if (message.includes("O")) {
+    audioFile = '/sounds/dimensionO.mp3';
+  } 
+  if (message.includes("P")) {
+    audioFile = '/sounds/dimensionP.mp3';
+  } 
+  if (message.includes("Part")) {
+    audioFile = '/sounds/partName.mp3';
+  } 
+  if (message.includes("Rotation")) {
+    audioFile = '/sounds/rotation.mp3';
+  } 
+  if (message.includes("UPH")) {
+    audioFile = '/sounds/UPH.mp3';
+  } 
+  if (message.includes("Linear")) {
+    audioFile = '/sounds/linear.mp3';
+  } 
+  if (message.includes("Hopper")) {
+    audioFile = '/sounds/hopper.mp3';
+  } 
+   if (message.includes("cleared")) {
+    audioFile = '/sounds/dataCleared.mp3';
+  } 
+
+
+
+  soundRef.current = new Howl({
+    src: [audioFile],
+    html5: true,
+    onplay: () => {
+      if (videoRef.current) {
+        videoRef.current.play();
+      }
+    },
+    onend: () => {
+      setIsSpeaking(false);
+      
+    }
+  });
+  
+  soundRef.current.play();
+};
+
   const handleDimensionClick = (dimension: string) => {
     setCurrentDimension(dimension)
     setDimensionValue(feederData.dimensions[dimension] || "")
   }
 
   const handleSend = () => {
-    if (!allDimensionsFilled()) return showTempError("Not Complete!")
-    setShowError(false)
     setShowContactForm(true)
   }
 
@@ -192,8 +300,16 @@ export default function FeederPage({
 
   const handleSendEmail = async () => {
     // Validate form - only name and email are required now
-    if (!contactForm.cname || !contactForm.name || !contactForm.email) {
-      showTempError("Please fill in name and email fields")
+    if (!contactForm.cname) {
+      showTempError("Please fill in your company name")
+      return
+    }
+     if (!contactForm.name) {
+      showTempError("Please fill in your name")
+      return
+    }
+     if (!contactForm.email) {
+      showTempError("Please fill in your email")
       return
     }
 
@@ -225,8 +341,14 @@ export default function FeederPage({
       })
 
       if (response.ok) {
+        // Show success poster
+        setShowSuccessPoster(true);
+
+        // Hide after 3 seconds
+        setTimeout(() => setShowSuccessPoster(false), 3000);
+
         // Show success message without closing the form
-        showTempError("Email sent successfully!", true)
+        showTempError("Email sent successfully!")
 
         // Reset the form fields and files
         setContactForm({ cname: "", name: "", email: "", phone: "", message: "" })
@@ -291,38 +413,121 @@ export default function FeederPage({
 
   const handleClearData = () => {
     clearCurrentPageData()
-    showTempError("Data cleared successfully!", true)
+    playErrorSound("Data cleared successfully!")
   }
 
-  const handleOkClick = () => {
-  // Check for empty required machine info fields
+  const dimensionErrorMessages: Record<string, string> = {
+  A: "Dimension A is missing!",
+  B: "Dimension B is missing!",
+  C: "Dimension C is missing!",
+  D: "Dimension D is missing!",
+  E: "Dimension E is missing!",
+  F: "Dimension F is missing!",
+  G: "Dimension G is missing!",
+  H: "Dimension H is missing!",
+  I: "Dimension I is missing!",
+  J: "Dimension J is missing!",
+  K: "Dimension K is missing!",
+  L: "Dimension L is missing!",
+  M: "Dimension M is missing!",
+  N: "Dimension N is missing!",
+  O: "Dimension O is missing!",
+  P: "Dimension P is missing!",
+};
 
+ // Update your handleOkClick function
+const handleOkClick = () => {
+  // First check dimensions
   if (!allDimensionsFilled()) {
-      showTempError("Dimension is not complete!")
-      return
-    }
+  const firstEmptyDimension = Object.keys(dimensionDescriptions).find(
+    key => !feederData.dimensions[key]
+  );
 
-  const emptyFields = machineInfoFields
-    .filter(field => field.id !== "remark") // remark is optional
-    .filter(field => !feederData.machineInfo[field.id] || feederData.machineInfo[field.id].trim() === "")
-    .map(field => field.id)
+  if (firstEmptyDimension) {
+    const errorMessage = dimensionErrorMessages[firstEmptyDimension] || "Dimension is not complete!";
+    playErrorSound(errorMessage);
 
-    setEmptyMachineFields(emptyFields)
-
-  if (emptyFields.length > 0) {
-    setShowIncompleteMachineInfoModal(true)
-    return
+    // Simulate click on the dimension button
+    const dimensionButton = document.querySelector(
+      `button[style*="left: ${dimensionPositions[firstEmptyDimension].x}%"]`
+    ) as HTMLElement;
+    dimensionButton?.click();
   }
 
-  // If all required fields are filled, proceed to success modal
-  setShowSuccessModal(true)
+  return;
 }
 
-  const showTempError = (message: string, isSuccess = false) => {
-    setShowError(true)
-    setErrorMessage(message)
-    setTimeout(() => setShowError(false), isSuccess ? 4000 : 5000)
+  // Then check machine info
+  const emptyFields = machineInfoFields
+    .filter(field => field.id !== "remark")
+    .filter(field => !feederData.machineInfo[field.id] || feederData.machineInfo[field.id].trim() === "");
+
+  setEmptyMachineFields(emptyFields.map(f => f.id));
+
+  if (emptyFields.length > 0) {
+    const firstEmptyField = emptyFields[0];
+    playErrorSound(`${firstEmptyField.label} is missing!`);
+    
+    // Focus on the first empty field
+    const inputElement = document.getElementById(firstEmptyField.id);
+    if (inputElement) {
+      inputElement.focus();
+      
+      // Scroll to the field if needed
+      inputElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+    }
+    
+    return;
   }
+
+  // If all validations pass
+  setShowSuccessModal(true);
+};
+
+  const showTempError = (message: string) => {
+  setShowCharacter(true);
+  setIsSpeaking(true);
+  setErrorMessage(message); // Set the error message to show in bubble
+  
+  let audioFile = '/dimension-not-complete.mp3';
+  if (message.includes("sent")) {
+    audioFile = '/sounds/emailSent.mp3';
+  } 
+  if (message.includes("company")) {
+    audioFile = '/sounds/companyName.mp3';
+  } 
+   if (message.includes("your name")) {
+    audioFile = '/sounds/name.mp3';
+  } 
+   if (message.includes("your email")) {
+    audioFile = '/sounds/email.mp3';
+  } 
+  if (message.includes("maximum")) {
+    audioFile = '/sounds/maxNumber.mp3';
+  } 
+  if (message.includes("10MB")) {
+    audioFile = '/sounds/10MB.mp3';
+  } 
+  
+  soundRef.current = new Howl({
+    src: [audioFile],
+    html5: true,
+    onplay: () => {
+      if (videoRef.current) {
+        videoRef.current.play();
+      }
+    },
+    onend: () => {
+      setIsSpeaking(false);
+    }
+  });
+  
+  soundRef.current.play();
+
+};
 
   const getCurrentDate = () => {
     const now = new Date()
@@ -458,7 +663,7 @@ export default function FeederPage({
 
       setShowPasteModal(false)
       setPasteText("")
-      showTempError("Data imported successfully!", true)
+      showTempError("Data imported successfully!")
     } else {
       // Update the form data with the already parsed values
       const updatedData = {
@@ -472,7 +677,7 @@ export default function FeederPage({
       setShowPasteModal(false)
       setPasteText("")
       setParsedData(null)
-      showTempError("Data imported successfully!", true)
+      showTempError("Data imported successfully!")
     }
   }
 
@@ -692,21 +897,6 @@ export default function FeederPage({
                   Close
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Error/Success Toast */}
-        {showError && (
-          <div className={`fixed inset-0 flex items-center justify-center z-[100] pointer-events-none print:hidden`}>
-            <div
-              className={`${
-                errorMessage.includes("successfully")
-                  ? "bg-green-100 border-2 border-green-500 text-green-700"
-                  : "bg-red-100 border-2 border-red-500 text-red-700"
-              } rounded-md shadow-lg p-4 max-w-xs text-center font-medium`}
-            >
-              {errorMessage}
             </div>
           </div>
         )}
@@ -1095,40 +1285,85 @@ export default function FeederPage({
           </div>
         )}
 
-        {showIncompleteMachineInfoModal && (
-  <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
-    <div className="bg-white rounded-lg p-6 shadow-lg w-[400px]">
-      <h2 className="text-xl font-bold mb-4">Incomplete Machine Information</h2>
-      <p className="mb-4">You haven't filled in all required machine information fields. Are you sure you want to proceed with blank fields?</p>
-      
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={() => {
-            setShowIncompleteMachineInfoModal(false)
-            // Focus on the first empty field
-            const firstEmptyField = document.getElementById(emptyMachineFields[0])
-            if (firstEmptyField) {
-              firstEmptyField.focus()
-            }
-          }}
-          className="px-4 py-2 border rounded-md hover:bg-gray-100"
-        >
-          No, I'll fill them
-        </button>
-        <button
-          onClick={() => {
-            setShowIncompleteMachineInfoModal(false)
-            setShowSuccessModal(true)
-          }}
-          className="px-4 py-2 bg-black text-white rounded-md"
-        >
-          Yes, proceed
-        </button>
-      </div>
-    </div>
+      <motion.div 
+  className="fixed bottom-6 right-6 z-50"
+  whileHover={{ scale: 1.05 }}
+>
+  <motion.div
+    className="relative w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg bg-white"
+    animate={{ 
+      scale: isSpeaking ? 1.15 : 1,
+      rotate: isSpeaking ? [0, -5, 5, -5, 0] : 0 
+    }}
+    transition={{ 
+      type: 'spring', 
+      stiffness: 500, 
+      damping: 20,
+      rotate: { duration: 0.5 }
+    }}
+  >
+    <video
+      ref={videoRef}
+      autoPlay
+      loop
+      muted
+      playsInline
+      className="absolute inset-0 w-full h-full object-cover"
+    >
+      <source src="/bot.webm" type="video/webm" />
+    </video>
+  </motion.div>
+
+  {/* Speech bubble outside of video container */}
+  <AnimatePresence>
+    {isSpeaking && (
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.8 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.8 }}
+        transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+        className="absolute -top-24 right-1/2 transform translate-x-12 bg-white px-4 py-3 rounded-2xl shadow-lg max-w-xs"
+        style={{
+          filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))'
+        }}
+      >
+        <p className="text-sm font-medium">
+          {errorMessage}
+        </p>
+
+        {/* Speech bubble tail */}
+        <div className="absolute -bottom-2 right-4 transform -translate-x-1/2 w-4 h-4 bg-white rotate-45 shadow-md"></div>
+
+        {/* Speaking indicator */}
+        <div className="absolute -bottom-6 right-4 transform -translate-x-1/2 flex space-x-1">
+          {[1, 2, 3].map((i) => (
+            <motion.div
+              key={i}
+              animate={{ 
+                height: [4, 8, 4],
+                opacity: [0.6, 1, 0.6]
+              }}
+              transition={{ 
+                repeat: Infinity,
+                duration: 0.8,
+                delay: i * 0.2
+              }}
+              className="w-1 bg-blue-500 rounded-full"
+              style={{ height: 4 }}
+            />
+          ))}
+        </div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+</motion.div>
+
+{showSuccessPoster && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <img src="/thank-you.jpeg" alt="Success" className="h-[90vh] w-auto mx-auto mb-4 shadow-xl" />
   </div>
 )}
-
+      
         {/* Paste Data Modal */}
         {showPasteModal && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">

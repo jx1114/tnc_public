@@ -31,7 +31,7 @@ export default function hopperPage() {
       dimensionDescriptions={hopperDimensionDescriptions}
       dimensionPositions={hopperDimensionPositions}
       machineInfoFields={[
-        { id: "partName", label: "Part Name", type: "text" },
+        { id: "partName", label: "Part Name / Project No.", type: "text" },
         { id: "hopperBinCapacity", label: "Hopper Bin Capacity", type: "number" },
         
       ]}

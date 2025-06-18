@@ -80,7 +80,7 @@ export default function LinearPage() {
         dimensionDescriptions={linearDimensionDescriptions}
         dimensionPositions={linearDimensionPositions}
         machineInfoFields={[
-          { id: "partName", label: "Part Name", type: "text" },
+          { id: "partName", label: "Part Name / Project No.", type: "text" },
           { id: "linearNo", label: "Linear No.", type: "text" },
          
         ]}

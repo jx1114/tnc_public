@@ -116,6 +116,14 @@ export default function WelcomePage() {
     }
   }, [currentIndex])
 
+  useEffect(() => {
+  videoRefs.current.forEach((video, idx) => {
+    if (video && slides[idx].video) {
+      video.load()
+    }
+  })
+}, [isLoaded])
+
   const handleSlideChange = (newIndex: number) => {
     if (isTransitioning || newIndex === currentIndex) return
 

@@ -87,6 +87,8 @@ export default function FeederPage({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const soundRef = useRef<Howl | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [conversationStep, setConversationStep] = useState(0) // 0: initial, 1: user replied, 2: welcome back
+  const [showImBackButton, setShowImBackButton] = useState(true)
 
   // Add this effect for audio cleanup
 useEffect(() => {
@@ -110,12 +112,16 @@ useEffect(() => {
   }
 
   function resetInactivityTimer() {
-    // Hide popup if showing
+    // Let the conversation flow handle the closing
     if (showInactivityPopup) {
-      setShowInactivityPopup(false)
+      // Just clear the timer, don't close the popup
+      if (inactivityTimer.current) {
+        clearTimeout(inactivityTimer.current)
+      }
+      return
     }
 
-    // Restart the timer
+    // Restart the timer only if popup is not showing
     startInactivityTimer()
   }
 
@@ -390,26 +396,7 @@ const playErrorSound = (message: string) => {
     return result
   }
 
-  const handleNext = () => {
-    if (!allDimensionsFilled()) {
-      showTempError("Not Complete!")
-      return
-    }
-    if (nextPageRoute) {
-      setCurrentFeederType(feederType)
-      if (nextPageRoute.includes("/")) {
-        const nextType = nextPageRoute.split("/").pop() || ""
-        setNextFeederType(nextType)
-      }
-      router.push(nextPageRoute)
-    }
-  }
-
-  const handleBack = () => {
-    if (previousPageRoute) {
-      router.push(previousPageRoute)
-    }
-  }
+ 
 
   const handleClearData = () => {
     clearCurrentPageData()
@@ -559,6 +546,39 @@ const handleOkClick = () => {
     })
   }
 
+  const useDragConstraints = () => {
+  const [constraints, setConstraints] = useState({
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0
+  });
+
+  useEffect(() => {
+    const updateConstraints = () => {
+      const visibleArea = 100; // Minimum visible area in pixels
+      setConstraints({
+        top: -window.innerHeight + visibleArea,
+        left: -window.innerWidth + visibleArea,
+        right: visibleArea,
+        bottom: visibleArea
+      });
+    };
+
+    // Set initial constraints
+    updateConstraints();
+
+    // Update on window resize
+    window.addEventListener('resize', updateConstraints);
+    return () => window.removeEventListener('resize', updateConstraints);
+  }, []);
+
+  return constraints;
+};
+
+// In your component
+const dragConstraints = useDragConstraints();
+
   const handlePasteData = () => {
     setShowPasteModal(true)
     setParsedData(null)
@@ -689,41 +709,122 @@ const handleOkClick = () => {
     <>
       <NavigationMenu />
       <div className="bg-[#f2f4f4] min-h-screen w-[1050px] overflow-auto mx-auto p-4 print:p-0 light">
-        {/* Inactivity Popup */}
-{showInactivityPopup && (
-  <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
-    {/* Floating Logos */}
-    <div className="absolute animate-floatAround">
-      <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
-    </div>
-    <div className="absolute animate-floatAroundReverse">
-      <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
-    </div>
+ {/* Inactivity Popup with Conversation */}
+        {showInactivityPopup && (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
+            {/* Floating Logos */}
+            <div className="absolute animate-floatAround">
+              <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
+            </div>
+            <div className="absolute animate-floatAroundReverse">
+              <Image src="/tnc-home-logo-nw.png" alt="TNC Logo" width={60} height={60} className="drop-shadow-lg" />
+            </div>
 
-    {/* Popup with Character */}
-    <div className="relative z-10 flex items-end mx-4">
-      {/* Character Image in Round Container */}
-      <div className="mr-4">
-         <div className="w-[60px] h-[60px] rounded-full overflow-hidden border border-white shadow-md flex items-center justify-center bg-white">
-            <img 
-              src="/tnc-home-logo.png" 
-              alt="TNC Logo" 
-              className="w-full h-full object-cover object-center" 
-            />
+            {/* Chat Container */}
+            <div className="relative z-10 bg-white rounded-2xl shadow-xl p-6 max-w-md mx-4 animate-fadeIn">
+              {/* Close button */}
+              <button
+                onClick={() => {
+                  setShowInactivityPopup(false)
+                  setConversationStep(0)
+                  setShowImBackButton(true)
+                  startInactivityTimer() // Restart the timer
+                }}
+                className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-xl"
+                aria-label="Close"
+              >
+                ×
+              </button>
+
+              <div className="flex flex-col space-y-4 min-h-[200px]">
+                {/* Company Message (Left side) */}
+                <div className="flex items-start space-x-3">
+                  <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 flex-shrink-0">
+                    <img src="/tnc-home-logo.png" alt="TNC Logo" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 max-w-xs">
+                    <p className="text-sm font-medium text-gray-800">Are you still there? We're here waiting for you to come back 😊</p>
+                  </div>
+                </div>
+
+                {/* User Message (Right side) - Shows after user clicks "I'm back" */}
+                {conversationStep >= 1 && (
+                  <div className="flex items-start space-x-3 justify-end">
+                    <div className="bg-blue-500 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-xs">
+                      <p className="text-sm">I'm back!</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold flex-shrink-0">
+                      U
+                    </div>
+                  </div>
+                )}
+
+                {/* Company Welcome Back Message (Left side) */}
+                {conversationStep >= 2 && (
+                  <div className="flex items-start space-x-3">
+                    <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 flex-shrink-0">
+                      <img src="/tnc-home-logo.png" alt="TNC Logo" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="bg-green-100 rounded-2xl rounded-tl-sm px-4 py-3 max-w-xs border border-green-200">
+                      <p className="text-sm font-medium text-green-800">Welcome back! 🎉</p>
+                      <p className="text-xs text-green-600 mt-1">Great to have you here again!</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* I'm Back Button */}
+                {showImBackButton && conversationStep === 0 && (
+                  <div className="flex justify-center pt-4">
+                    <button
+                      onClick={() => {
+                        setConversationStep(1)
+                        setShowImBackButton(false)
+
+                        // Show welcome back message after a short delay
+                        setTimeout(() => {
+                          setConversationStep(2)
+
+                          // Auto-close the popup after showing welcome message
+                          setTimeout(() => {
+                            setShowInactivityPopup(false)
+                            setConversationStep(0)
+                            setShowImBackButton(true)
+                            startInactivityTimer() // Restart the timer after closing
+                          }, 2000)
+                        }, 1000)
+                      }}
+                      className="bg-red-700 text-white px-6 py-2 rounded-full font-medium transition-colors duration-200 shadow-lg"
+                    >
+                      I'm back
+                    </button>
+                  </div>
+                )}
+
+                {/* Typing indicator when showing welcome message */}
+                {conversationStep === 1 && (
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 flex-shrink-0">
+                      <img src="/tnc-home-logo.png" alt="TNC Logo" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="bg-gray-100 rounded-2xl px-4 py-3">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div
+                          className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                          style={{ animationDelay: "0.1s" }}
+                        ></div>
+                        <div
+                          className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                          style={{ animationDelay: "0.2s" }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-      </div>
-
-      {/* Speech Bubble */}
-      <div className="relative bg-white p-4 rounded-2xl shadow-xl text-left max-w-md animate-fadeIn">
-        <h2 className="text-base font-semibold mb-1">We're here waiting for you to come back 😊</h2>
-        <p className="text-gray-500 text-sm">Don't say goodbye to us...</p>
-
-        {/* Triangle for speech bubble */}
-        <div className="absolute left-[-10px] top-6 w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-r-[10px] border-r-white"></div>
-      </div>
-    </div>
-  </div>
-)}
+        )}
 
         <div ref={printRef} className="print-container flex flex-col h-[297mm] p-4 print:p-0 relative">
           {/* Original title */}
@@ -847,23 +948,6 @@ const handleOkClick = () => {
 
           <div className="text-center text-sm text-gray-500 mt-auto">Generated on {getCurrentDate()}</div>
 
-          {nextPageRoute && (
-            <button
-              onClick={handleNext}
-              className="absolute bottom-4 right-4 print:hidden bg-black hover:bg-gray-800 text-white px-4 py-2 rounded-md"
-            >
-              Next
-            </button>
-          )}
-
-          {previousPageRoute && (
-            <button
-              onClick={handleBack}
-              className="absolute bottom-4 left-4 print:hidden bg-gray-200 hover:bg-gray-300 text-black px-4 py-2 rounded-md"
-            >
-              Back
-            </button>
-          )}
         </div>
 
         {/* Input Dialog */}
@@ -970,7 +1054,7 @@ const handleOkClick = () => {
 
         {/* Contact Form */}
         {showContactForm && (
-          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
+          <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center print:hidden">
             <div className="bg-white rounded-lg p-6 shadow-md w-[500px] max-h-[90vh] overflow-y-auto relative">
               {/* Add close button */}
               <button
@@ -1286,7 +1370,10 @@ const handleOkClick = () => {
         )}
 
       <motion.div 
-  className="fixed bottom-40 sm:bottom-6 right-6 z-50"
+  className="fixed bottom-40 sm:bottom-6 right-6 z-40 cursor-grab active:cursor-grabbing"
+  drag
+  dragConstraints={dragConstraints}
+  dragElastic={0.2}
   whileHover={{ scale: 1.05 }}
 >
   <motion.div

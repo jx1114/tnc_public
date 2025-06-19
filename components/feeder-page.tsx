@@ -1286,7 +1286,7 @@ const handleOkClick = () => {
         )}
 
       <motion.div 
-  className="fixed bottom-24 sm:bottom-6 right-6 z-50"
+  className="fixed bottom-40 sm:bottom-6 right-6 z-50"
   whileHover={{ scale: 1.05 }}
 >
   <motion.div

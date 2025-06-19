@@ -8,9 +8,10 @@ import { useRouter, usePathname } from "next/navigation"
 import { useFormContext } from "@/context/FormContext"
 import NavigationMenu from "./navigation-menu"
 import ModelViewer from "./model-viewer"
-import { Printer, RefreshCw, Send, Check } from "lucide-react"
+import { Printer, RefreshCw, Send, Check, ExternalLink } from "lucide-react"
 import { Howl } from 'howler';
 import { motion, AnimatePresence } from 'framer-motion';
+
 
 export type FeederPageProps = {
   title: string
@@ -60,6 +61,7 @@ export default function FeederPage({
   const [errorMessage, setErrorMessage] = useState("")
   const [showModelViewer, setShowModelViewer] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [showBackToMain, setShowBackToMain] = useState(false)
   const [showContactForm, setShowContactForm] = useState(false)
   const [contactForm, setContactForm] = useState({ cname: "", name: "", email: "", phone: "", message: "" })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -347,9 +349,10 @@ const playErrorSound = (message: string) => {
         // Show success message without closing the form
         showTempError("Email sent successfully!")
 
-        // Reset the form fields and files
-        setContactForm({ cname: "", name: "", email: "", phone: "", message: "" })
-        setSelectedFiles([])
+        // Close the contact form
+        setShowContactForm(false)
+
+        setShowBackToMain(true)
       } else {
         showTempError("Failed to send email")
       }
@@ -1283,7 +1286,7 @@ const handleOkClick = () => {
         )}
 
       <motion.div 
-  className="fixed bottom-6 right-6 z-50"
+  className="fixed bottom-24 sm:bottom-6 right-6 z-50"
   whileHover={{ scale: 1.05 }}
 >
   <motion.div
@@ -1354,6 +1357,49 @@ const handleOkClick = () => {
     )}
   </AnimatePresence>
 </motion.div>
+
+ {/* Back to Main */}
+        {showBackToMain && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center print:hidden">
+            <div className="relative bg-white p-6 rounded-lg w-[500px] shadow-lg text-center">
+              
+              <h2 className="text-2xl font-bold mb-4">Back to main page or continue with the new configuration?</h2>
+
+              <img
+                src="/tick.gif"
+                alt="TNC logo" 
+                className="mx-auto mb-4 w-70 h-auto"
+              />
+             
+              {/* Buttons: Back to main page or continue */}
+              <div className="flex justify-center gap-4 mt-2">
+                <button
+                  onClick={() => {
+                    setShowBackToMain(false)
+                    router.push("/")
+                  }}
+                  className="bg-white text-black border border-black px-6 py-2 rounded-md"
+                >
+                  Continue
+                </button>
+
+
+                {/* New External Link Button */}
+  <a
+    href="https://www.tnctech.com.my" 
+    target="_blank"
+    rel="noopener noreferrer"
+    className="bg-black text-white px-6 py-2 rounded-md flex items-center"
+  >
+    <ExternalLink className="mr-2 h-4 w-4" />
+    Back To Main
+  </a>
+
+
+              </div>
+            </div>
+          </div>
+        )}
 
 {showSuccessPoster && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">

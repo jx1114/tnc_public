@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useFormContext } from "@/context/FormContext"
 import { ChevronDown, Home } from "lucide-react"
+import { ExternalLink } from "lucide-react"
 
 export default function NavigationMenu() {
   const router = useRouter()

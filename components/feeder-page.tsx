@@ -546,7 +546,7 @@ const handleOkClick = () => {
     })
   }
 
-  const useDragConstraints = () => {
+  const useDragConstraints = (visibleArea = 100) => {
   const [constraints, setConstraints] = useState({
     top: 0,
     left: 0,
@@ -556,28 +556,28 @@ const handleOkClick = () => {
 
   useEffect(() => {
     const updateConstraints = () => {
-      const visibleArea = 100; // Minimum visible area in pixels
+       // Get the viewport size EXCLUDING scrollbars
+      const viewportWidth = document.documentElement.clientWidth;
+      const viewportHeight = document.documentElement.clientHeight;
+
       setConstraints({
-        top: -window.innerHeight + visibleArea,
-        left: -window.innerWidth + visibleArea,
-        right: visibleArea,
-        bottom: visibleArea
+        top: -viewportHeight + visibleArea,    // Can't drag above leaving <100px at bottom
+        left: -viewportWidth + visibleArea,    // Can't drag left leaving <100px at right
+        right: 0,    
+        bottom: 0 
       });
     };
 
-    // Set initial constraints
     updateConstraints();
-
-    // Update on window resize
     window.addEventListener('resize', updateConstraints);
     return () => window.removeEventListener('resize', updateConstraints);
-  }, []);
+  }, [visibleArea]);
 
   return constraints;
 };
 
 // In your component
-const dragConstraints = useDragConstraints();
+const dragConstraints = useDragConstraints(100); // Always keeps 100px visible
 
   const handlePasteData = () => {
     setShowPasteModal(true)

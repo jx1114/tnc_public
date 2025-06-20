@@ -1377,29 +1377,24 @@ const dragConstraints = useDragConstraints(100); // Always keeps 100px visible
   whileHover={{ scale: 1.05 }}
 >
   <motion.div
-    className="relative w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg bg-white"
-    animate={{ 
-      scale: isSpeaking ? 1.15 : 1,
-      rotate: isSpeaking ? [0, -5, 5, -5, 0] : 0 
-    }}
-    transition={{ 
-      type: 'spring', 
-      stiffness: 500, 
-      damping: 20,
-      rotate: { duration: 0.5 }
-    }}
-  >
-    <video
-      ref={videoRef}
-      autoPlay
-      loop
-      muted
-      playsInline
-      className="absolute inset-0 w-full h-full object-cover"
-    >
-      <source src="/bot.webm" type="video/webm" />
-    </video>
-  </motion.div>
+  className="relative w-24 h-24 rounded-full overflow-hidden border-4 border-transparent shadow-lg bg-transparent"
+  animate={{ 
+    scale: isSpeaking ? 1.15 : 1,
+    rotate: isSpeaking ? [0, -5, 5, -5, 0] : 0 
+  }}
+  transition={{ 
+    type: 'spring', 
+    stiffness: 500, 
+    damping: 20,
+    rotate: { duration: 0.5 }
+  }}
+>
+  <img
+    src="/bot.gif"
+    alt="Animated bot"
+    className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+  />
+</motion.div>
 
   {/* Speech bubble outside of video container */}
   <AnimatePresence>
